@@ -1,69 +1,128 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { POSProvider, usePOS } from '@/context/POSContext';
+import Navbar from '@/components/Navbar';
+import POSView from '@/components/POSView';
+import InventoryView from '@/components/InventoryView';
+import HistoryView from '@/components/HistoryView';
+import ShiftReportView from '@/components/ShiftReportView';
+import SettingsView from '@/components/SettingsView';
+import PaymentModal from '@/components/PaymentModal';
+import ReceiptModal from '@/components/ReceiptModal';
+import HeldOrdersModal from '@/components/HeldOrdersModal';
+
+function POSMainApp() {
+  const {
+    activeTab,
+    isPaymentModalOpen,
+    setIsPaymentModalOpen,
+    lastCompletedOrder,
+    setLastCompletedOrder,
+    cart,
+  } = usePOS();
+
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isHeldModalOpen, setIsHeldModalOpen] = useState(false);
+
+  // Automatically open Receipt modal when an order is completed
+  useEffect(() => {
+    if (lastCompletedOrder) {
+      setIsReceiptModalOpen(true);
+    }
+  }, [lastCompletedOrder]);
+
+  // Global Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if user is typing in an input/textarea
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const isInput = targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select';
+
+      // F2 or Space to checkout if on POS tab and cart has items
+      if ((e.key === 'F2') && activeTab === 'pos' && cart.length > 0 && !isPaymentModalOpen) {
+        e.preventDefault();
+        setIsPaymentModalOpen(true);
+      }
+
+      // Escape to close modals
+      if (e.key === 'Escape') {
+        if (isPaymentModalOpen) setIsPaymentModalOpen(false);
+        if (isReceiptModalOpen) {
+          setIsReceiptModalOpen(false);
+          setLastCompletedOrder(null);
+        }
+        if (isHeldModalOpen) setIsHeldModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    activeTab,
+    cart.length,
+    isPaymentModalOpen,
+    isReceiptModalOpen,
+    isHeldModalOpen,
+    setIsPaymentModalOpen,
+    setLastCompletedOrder,
+  ]);
+
+  return (
+    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden select-none">
+      {/* Top Header & Navbar */}
+      <Navbar onOpenHeldOrders={() => setIsHeldModalOpen(true)} />
+
+      {/* Main Views Container */}
+      <main className="flex-1 flex overflow-hidden relative">
+        {activeTab === 'pos' && (
+          <POSView onOpenHeldOrders={() => setIsHeldModalOpen(true)} />
+        )}
+
+        {activeTab === 'inventory' && <InventoryView />}
+
+        {activeTab === 'history' && (
+          <HistoryView
+            onViewReceipt={(order) => {
+              setLastCompletedOrder(order);
+              setIsReceiptModalOpen(true);
+            }}
+          />
+        )}
+
+        {activeTab === 'shift' && <ShiftReportView />}
+
+        {activeTab === 'settings' && <SettingsView />}
+      </main>
+
+      {/* Payment Processing Modal */}
+      <PaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+      />
+
+      {/* Thermal Receipt Print Modal */}
+      <ReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => {
+          setIsReceiptModalOpen(false);
+          setLastCompletedOrder(null);
+        }}
+      />
+
+      {/* Held / Parked Carts Modal */}
+      <HeldOrdersModal
+        isOpen={isHeldModalOpen}
+        onClose={() => setIsHeldModalOpen(false)}
+      />
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <POSProvider>
+      <POSMainApp />
+    </POSProvider>
   );
 }
