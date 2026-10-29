@@ -13,6 +13,7 @@ import {
 } from '@/types/pos';
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '@/lib/mockData';
 import { soundManager } from '@/lib/sound';
+import { apiClient } from '@/lib/apiClient';
 
 interface POSContextType {
   products: Product[];
@@ -31,6 +32,12 @@ interface POSContextType {
   setSearchQuery: (query: string) => void;
   selectedCategory: string;
   setSelectedCategory: (cat: string) => void;
+
+  // Supabase & API Sync status
+  dbSource: string;
+  isSupabaseLive: boolean;
+  isSyncing: boolean;
+  refreshFromApi: () => Promise<void>;
 
   // Cart Actions
   addToCart: (product: Product, qty?: number) => void;
@@ -95,7 +102,47 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Load persisted state on client mount
+  // Sync state
+  const [dbSource, setDbSource] = useState<string>('Checking...');
+  const [isSupabaseLive, setIsSupabaseLive] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Load from Supabase via Next.js API
+  const refreshFromApi = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      // 1. Health check
+      const health = await apiClient.checkHealth();
+      if (health && health.database) {
+        setDbSource(health.database);
+        setIsSupabaseLive(health.database.includes('Supabase'));
+      }
+
+      // 2. Products from API
+      const prodRes = await apiClient.getProducts();
+      if (prodRes && prodRes.success && prodRes.data && prodRes.data.length > 0) {
+        setProducts(prodRes.data);
+      }
+
+      // 3. Orders from API
+      const ordersRes = await apiClient.getOrders();
+      if (ordersRes && ordersRes.success && ordersRes.data && ordersRes.data.length > 0) {
+        setOrders(ordersRes.data);
+      }
+
+      // 4. Settings from API
+      const settingsRes = await apiClient.getSettings();
+      if (settingsRes && settingsRes.success && settingsRes.data) {
+        setSettings((prev) => ({ ...prev, ...settingsRes.data }));
+      }
+    } catch (err) {
+      console.warn('API sync warning (operating in local offline mode):', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // Load persisted state on client mount, then sync with API
   useEffect(() => {
     try {
       const savedProducts = localStorage.getItem('minimart_pos_products');
@@ -127,17 +174,20 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } catch {
-      // fallback to initial state
+      // fallback
     }
     setIsHydrated(true);
-  }, []);
+
+    // Initial API Sync
+    refreshFromApi();
+  }, [refreshFromApi]);
 
   // Sync sound manager enabled flag with settings
   useEffect(() => {
     soundManager.enabled = settings.soundEnabled;
   }, [settings.soundEnabled]);
 
-  // Persist back to localStorage only after hydration
+  // Persist back to localStorage
   useEffect(() => {
     if (!isHydrated) return;
     localStorage.setItem('minimart_pos_products', JSON.stringify(products));
@@ -324,6 +374,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     setHeldOrders((prev) => [heldItem, ...prev]);
     setCart([]);
     soundManager.playClick();
+
+    // Async sync to API
+    apiClient.saveHeldOrder(heldItem).catch(() => {});
   }, [cart, heldOrders.length, cartItemCount, cartSubtotal, cartTotal, settings.activeCashier]);
 
   const resumeHeldOrder = useCallback((heldId: string) => {
@@ -345,14 +398,16 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
     setHeldOrders((prev) => prev.filter((h) => h.id !== heldId));
     soundManager.playSuccess();
+    apiClient.deleteHeldOrder(heldId).catch(() => {});
   }, [heldOrders, cart]);
 
   const deleteHeldOrder = useCallback((heldId: string) => {
     setHeldOrders((prev) => prev.filter((h) => h.id !== heldId));
     soundManager.playClick();
+    apiClient.deleteHeldOrder(heldId).catch(() => {});
   }, []);
 
-  // Process checkout
+  // Process checkout & sync to PostgreSQL via Next.js API
   const processPayment = useCallback(
     (paymentMethod: PaymentMethod, amountTendered: number, notes?: string): Order | null => {
       if (cart.length === 0) return null;
@@ -401,6 +456,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         notes,
       };
 
+      // 1. Immediately update UI state (deduct stock in local products)
       setProducts((prev) =>
         prev.map((prod) => {
           const inCart = cart.find((c) => c.product.id === prod.id);
@@ -414,8 +470,10 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         })
       );
 
+      // 2. Add to orders list
       setOrders((prev) => [completedOrder, ...prev]);
 
+      // 3. Audio feedback
       if (paymentMethod === 'CASH') {
         soundManager.playCashDrawer();
         setTimeout(() => soundManager.playSuccess(), 250);
@@ -427,6 +485,22 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       setCart([]);
       setIsPaymentModalOpen(false);
 
+      // 4. Concurrently push to Secure Next.js API -> Supabase PostgreSQL
+      apiClient
+        .createOrder({
+          items: completedOrder.items,
+          subtotal: completedOrder.subtotal,
+          discountAmount: completedOrder.discountAmount,
+          taxAmount: completedOrder.taxAmount,
+          total: completedOrder.total,
+          paymentMethod: completedOrder.paymentMethod,
+          amountTendered: completedOrder.amountTendered,
+          changeGiven: completedOrder.changeGiven,
+          cashierName: completedOrder.cashierName,
+          notes: completedOrder.notes,
+        })
+        .catch((err) => console.error('Failed to sync order to API:', err));
+
       return completedOrder;
     },
     [cart, cartSubtotal, cartTax, cartTotal, settings.activeCashier]
@@ -436,6 +510,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     const target = orders.find((o) => o.id === orderId);
     if (!target || target.status === 'REFUNDED') return;
 
+    // Restore stock locally
     setProducts((prev) =>
       prev.map((prod) => {
         const returnedItem = target.items.find((i) => i.productId === prod.id);
@@ -449,6 +524,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       })
     );
 
+    // Update order status locally
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId
@@ -462,6 +538,11 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     );
 
     soundManager.playClick();
+
+    // Call API refund endpoint
+    apiClient.refundOrder(orderId, reason).catch((err) => {
+      console.error('Failed to sync refund to API:', err);
+    });
   }, [orders]);
 
   const addProduct = useCallback((newProd: Omit<Product, 'id'>) => {
@@ -472,11 +553,21 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     };
     setProducts((prev) => [created, ...prev]);
     soundManager.playSuccess();
+
+    // Sync to API
+    apiClient.createProduct(created).catch((err) => {
+      console.error('Failed to add product to API:', err);
+    });
   }, []);
 
   const updateProduct = useCallback((updated: Product) => {
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     soundManager.playClick();
+
+    // Sync to API
+    apiClient.updateProduct(updated.id, updated).catch((err) => {
+      console.error('Failed to update product on API:', err);
+    });
   }, []);
 
   const restockProduct = useCallback((productId: string, amount: number) => {
@@ -484,48 +575,73 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       prev.map((p) => (p.id === productId ? { ...p, stock: p.stock + amount } : p))
     );
     soundManager.playBeep();
+
+    // Sync to API
+    apiClient.restockProduct(productId, amount).catch((err) => {
+      console.error('Failed to restock on API:', err);
+    });
   }, []);
 
   const deleteProduct = useCallback((productId: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== productId));
     soundManager.playClick();
+
+    // Sync to API
+    apiClient.deleteProduct(productId).catch((err) => {
+      console.error('Failed to delete on API:', err);
+    });
   }, []);
 
   const updateSettings = useCallback((newSettings: Partial<POSSettings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
+    apiClient.updateSettings(newSettings).catch((err) => {
+      console.error('Failed to update settings on API:', err);
+    });
   }, []);
 
   const performCashDrop = useCallback((amount: number, reason: string) => {
-    setShift((prev) => ({
-      ...prev,
-      cashDrops: prev.cashDrops + amount,
-      notes: (prev.notes ? prev.notes + '\n' : '') + `Cash drop: $${amount} (${reason}) at ${new Date().toLocaleTimeString()}`,
-    }));
+    setShift((prev) => {
+      const updated = {
+        ...prev,
+        cashDrops: prev.cashDrops + amount,
+        notes:
+          (prev.notes ? prev.notes + '\n' : '') +
+          `Cash drop: $${amount} (${reason}) at ${new Date().toLocaleTimeString()}`,
+      };
+      apiClient.saveShift(updated).catch(() => {});
+      return updated;
+    });
     soundManager.playCashDrawer();
   }, []);
 
   const closeShift = useCallback((actualCashInDrawer: number, notes?: string) => {
-    setShift((prev) => ({
-      ...prev,
-      endedAt: new Date().toISOString(),
-      actualDrawerCash: actualCashInDrawer,
-      notes: (prev.notes ? prev.notes + '\n' : '') + (notes || 'Shift closed.'),
-      isClosed: true,
-    }));
+    setShift((prev) => {
+      const updated = {
+        ...prev,
+        endedAt: new Date().toISOString(),
+        actualDrawerCash: actualCashInDrawer,
+        notes: (prev.notes ? prev.notes + '\n' : '') + (notes || 'Shift closed.'),
+        isClosed: true,
+      };
+      apiClient.saveShift(updated).catch(() => {});
+      return updated;
+    });
     soundManager.playClick();
   }, []);
 
   const startNewShift = useCallback((startingFloat: number, cashierName: string) => {
-    setShift({
+    const newShift: CashierShift = {
       id: 'shift-' + Date.now(),
       cashierName,
       startedAt: new Date().toISOString(),
       startingFloat,
       cashDrops: 0,
       isClosed: false,
-    });
+    };
+    setShift(newShift);
     setSettings((prev) => ({ ...prev, activeCashier: cashierName }));
     soundManager.playSuccess();
+    apiClient.saveShift(newShift).catch(() => {});
   }, []);
 
   const resetToSampleData = useCallback(() => {
@@ -558,6 +674,10 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         setSearchQuery,
         selectedCategory,
         setSelectedCategory,
+        dbSource,
+        isSupabaseLive,
+        isSyncing,
+        refreshFromApi,
         addToCart,
         addByBarcode,
         updateQuantity,

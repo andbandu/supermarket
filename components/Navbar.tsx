@@ -16,6 +16,13 @@ import {
   User,
   PauseCircle,
   KeyRound,
+  Database,
+  Smartphone,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Code2,
 } from 'lucide-react';
 
 export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => void }) {
@@ -27,9 +34,13 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
     cartItemCount,
     heldOrders,
     products,
+    isSupabaseLive,
+    isSyncing,
+    refreshFromApi,
   } = usePOS();
 
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [showApiModal, setShowApiModal] = useState(false);
 
   useEffect(() => {
     const update = () => {
@@ -43,7 +54,6 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate low stock items count
   const lowStockCount = products.filter((p) => p.stock <= p.reorderLevel).length;
 
   const handleOpenDrawer = () => {
@@ -72,9 +82,29 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
               <span className="font-bold text-base tracking-wide text-white font-mono">
                 {settings.storeName}
               </span>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                LIVE POS
-              </span>
+
+              {/* Supabase & Mobile API Status Pill */}
+              <button
+                onClick={() => setShowApiModal(true)}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                  isSupabaseLive
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
+                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25'
+                }`}
+                title="Click to view Supabase PostgreSQL & Mobile API status"
+              >
+                <Database className="w-3 h-3" />
+                <span>{isSupabaseLive ? 'Supabase Postgres' : 'Postgres API'}</span>
+                {isSyncing ? (
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin ml-0.5 text-cyan-400" />
+                ) : (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isSupabaseLive ? 'bg-emerald-400' : 'bg-cyan-400'
+                    }`}
+                  />
+                )}
+              </button>
             </div>
             <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
               {settings.tagline}
@@ -172,6 +202,16 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
 
         {/* Right Status Actions */}
         <div className="flex items-center gap-3">
+          {/* Mobile API quick info button */}
+          <button
+            onClick={() => setShowApiModal(true)}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/25 transition text-xs font-medium"
+            title="Mobile App API connection documentation"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Mobile API</span>
+          </button>
+
           {/* Held Orders quick shortcut */}
           {heldOrders.length > 0 && (
             <button
@@ -228,7 +268,129 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
           </div>
         </div>
       </div>
+
+      {/* Supabase & Mobile API Modal */}
+      {showApiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="font-bold text-sm text-white">
+                    Supabase PostgreSQL & Mobile App API
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Secure endpoints ready for web and mobile apps
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowApiModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              {/* Database Status Card */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  {isSupabaseLive ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <h4 className="font-bold text-slate-200">
+                      {isSupabaseLive
+                        ? 'Supabase PostgreSQL: Connected & Live'
+                        : 'PostgreSQL Database: Local API Active'}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {isSupabaseLive
+                        ? 'All products, sales, and inventory changes persist directly to Supabase cloud PostgreSQL.'
+                        : 'To link your Supabase account, add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to .env.local.'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={refreshFromApi}
+                  disabled={isSyncing}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 border border-slate-700 shrink-0"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>Sync Now</span>
+                </button>
+              </div>
+
+              {/* Mobile App Connection Guide */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
+                  <Smartphone className="w-4 h-4 text-indigo-400" />
+                  Mobile App Connection Specs (Flutter, React Native, Swift, Kotlin)
+                </h4>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] space-y-2 text-slate-300">
+                  <div>
+                    <span className="text-slate-500"># 1. API Base URL</span>
+                    <p className="text-emerald-400 font-bold">http://&lt;your-server-ip&gt;:3000/api</p>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500"># 2. Authentication Header</span>
+                    <p className="text-amber-400">
+                      x-api-key: minimart_pos_sec_key_2026
+                    </p>
+                    <span className="text-slate-500 text-[10px]">
+                      (Or `Authorization: Bearer minimart_pos_sec_key_2026`)
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500"># 3. Available Endpoints</span>
+                    <ul className="list-disc pl-4 space-y-0.5 text-slate-400 mt-1">
+                      <li>
+                        <code className="text-sky-300">GET /api/products</code> - List catalog & stock
+                      </li>
+                      <li>
+                        <code className="text-sky-300">POST /api/orders</code> - Process sale & reduce stock
+                      </li>
+                      <li>
+                        <code className="text-sky-300">POST /api/orders/:id/refund</code> - Refund order
+                      </li>
+                      <li>
+                        <code className="text-sky-300">GET /api/health</code> - Server & DB health check
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Supabase SQL Schema quick notice */}
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-2">
+                  <Code2 className="w-4 h-4 text-emerald-400" />
+                  <span>
+                    PostgreSQL tables script generated in:{' '}
+                    <code className="text-emerald-400 font-mono">supabase/schema.sql</code>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setShowApiModal(false)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
-
