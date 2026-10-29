@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
 
 export async function GET(
   request: Request,
@@ -10,23 +10,27 @@ export async function GET(
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
   const { id } = await params;
-  const supabase = getSupabaseAdmin();
 
-  if (supabase && isSupabaseConfigured()) {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', id)
-      .single();
+  if (isPrismaConfigured()) {
+    try {
+      const product = await prisma.product.findUnique({
+        where: { id },
+      });
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+      if (!product) {
+        return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data: product });
+    } catch (err: unknown) {
+      return NextResponse.json(
+        { success: false, error: err instanceof Error ? err.message : 'Database error' },
+        { status: 500 }
+      );
     }
-
-    return NextResponse.json({ success: true, data });
   }
 
-  return NextResponse.json({ success: false, error: 'Product not found in database' }, { status: 404 });
+  return NextResponse.json({ success: false, error: 'Database not connected' }, { status: 404 });
 }
 
 export async function PUT(
@@ -38,35 +42,33 @@ export async function PUT(
 
   const { id } = await params;
   const body = await request.json();
-  const supabase = getSupabaseAdmin();
 
-  if (supabase && isSupabaseConfigured()) {
-    const updatePayload: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
+  if (isPrismaConfigured()) {
+    try {
+      const updateData: Record<string, unknown> = {};
 
-    if (body.name !== undefined) updatePayload.name = body.name;
-    if (body.barcode !== undefined) updatePayload.barcode = body.barcode;
-    if (body.category !== undefined) updatePayload.category = body.category;
-    if (body.price !== undefined) updatePayload.price = Number(body.price);
-    if (body.costPrice !== undefined) updatePayload.cost_price = Number(body.costPrice);
-    if (body.stock !== undefined) updatePayload.stock = Number(body.stock);
-    if (body.reorderLevel !== undefined) updatePayload.reorder_level = Number(body.reorderLevel);
-    if (body.unit !== undefined) updatePayload.unit = body.unit;
-    if (body.isTaxable !== undefined) updatePayload.is_taxable = Boolean(body.isTaxable);
+      if (body.name !== undefined) updateData.name = body.name;
+      if (body.barcode !== undefined) updateData.barcode = body.barcode;
+      if (body.category !== undefined) updateData.category = body.category;
+      if (body.price !== undefined) updateData.price = Number(body.price);
+      if (body.costPrice !== undefined) updateData.costPrice = Number(body.costPrice);
+      if (body.stock !== undefined) updateData.stock = Number(body.stock);
+      if (body.reorderLevel !== undefined) updateData.reorderLevel = Number(body.reorderLevel);
+      if (body.unit !== undefined) updateData.unit = body.unit;
+      if (body.isTaxable !== undefined) updateData.isTaxable = Boolean(body.isTaxable);
 
-    const { data, error } = await supabase
-      .from('products')
-      .update(updatePayload)
-      .eq('id', id)
-      .select()
-      .single();
+      const updated = await prisma.product.update({
+        where: { id },
+        data: updateData,
+      });
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data: updated });
+    } catch (err: unknown) {
+      return NextResponse.json(
+        { success: false, error: err instanceof Error ? err.message : 'Update failed' },
+        { status: 400 }
+      );
     }
-
-    return NextResponse.json({ success: true, data });
   }
 
   return NextResponse.json({ success: true, message: 'Updated locally', data: body });
@@ -83,36 +85,25 @@ export async function PATCH(
   const body = await request.json();
   const restockAmount = Number(body.restockAmount || 0);
 
-  const supabase = getSupabaseAdmin();
-  if (supabase && isSupabaseConfigured()) {
-    // Fetch current stock
-    const { data: current, error: fetchErr } = await supabase
-      .from('products')
-      .select('stock')
-      .eq('id', id)
-      .single();
+  if (isPrismaConfigured()) {
+    try {
+      const updated = await prisma.product.update({
+        where: { id },
+        data: {
+          stock: { increment: restockAmount },
+        },
+      });
 
-    if (fetchErr) {
-      return NextResponse.json({ success: false, error: fetchErr.message }, { status: 404 });
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data: updated });
+    } catch (err: unknown) {
+      return NextResponse.json(
+        { success: false, error: err instanceof Error ? err.message : 'Restock failed' },
+        { status: 400 }
+      );
     }
-
-    const newStock = Math.max(0, (current.stock || 0) + restockAmount);
-
-    const { data, error } = await supabase
-      .from('products')
-      .update({ stock: newStock, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ success: true, data });
   }
 
-  return NextResponse.json({ success: true, message: 'Stock updated', restockAmount });
+  return NextResponse.json({ success: true, message: 'Stock updated locally', restockAmount });
 }
 
 export async function DELETE(
@@ -123,15 +114,20 @@ export async function DELETE(
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
   const { id } = await params;
-  const supabase = getSupabaseAdmin();
 
-  if (supabase && isSupabaseConfigured()) {
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  if (isPrismaConfigured()) {
+    try {
+      await prisma.product.delete({
+        where: { id },
+      });
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', message: `Product ${id} deleted` });
+    } catch (err: unknown) {
+      return NextResponse.json(
+        { success: false, error: err instanceof Error ? err.message : 'Delete failed' },
+        { status: 400 }
+      );
     }
   }
 
-  return NextResponse.json({ success: true, message: `Product ${id} deleted` });
+  return NextResponse.json({ success: true, message: `Product ${id} deleted locally` });
 }
-

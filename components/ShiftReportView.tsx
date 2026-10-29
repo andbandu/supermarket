@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { soundManager } from '@/lib/sound';
+import { toast } from '@/context/ToastContext';
 import {
   BarChart3,
   Printer,
@@ -19,15 +20,15 @@ import {
 } from 'lucide-react';
 
 export default function ShiftReportView() {
-  const { shift, orders, settings, performCashDrop, closeShift, startNewShift } = usePOS();
+  const { shift, orders, settings, performCashDrop, closeShift, startNewShift, formatPrice } = usePOS();
 
   const [actualDrawerCount, setActualDrawerCount] = useState<string>('');
   const [cashDropAmount, setCashDropAmount] = useState<string>('');
   const [cashDropReason, setCashDropReason] = useState<string>('Mid-day safe drop');
   const [showDropModal, setShowDropModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
-  const [newCashierName, setNewCashierName] = useState('Alex Rivera (Cashier #02)');
-  const [newStartingFloat, setNewStartingFloat] = useState('200.00');
+  const [newCashierName, setNewCashierName] = useState('Kasun Perera (Cashier #01)');
+  const [newStartingFloat, setNewStartingFloat] = useState('5000.00');
 
   // Filter orders created during this shift
   const shiftOrders = orders.filter(
@@ -70,30 +71,38 @@ export default function ShiftReportView() {
   const handleExecuteDrop = () => {
     const amt = parseFloat(cashDropAmount);
     if (isNaN(amt) || amt <= 0) {
-      alert('Please enter a valid cash amount to drop.');
+      soundManager.playError();
+      toast.warning('Please enter a valid cash amount to drop into the safe.', 'Invalid Amount');
       return;
     }
     performCashDrop(amt, cashDropReason);
     setShowDropModal(false);
     setCashDropAmount('');
-    alert(`Successfully dropped ${settings.currencySymbol}${amt.toFixed(2)} to safe.`);
+    toast.success(
+      `Successfully dropped ${formatPrice(amt)} to safe.`,
+      'Safe Drop Recorded'
+    );
   };
 
   const handleExecuteClose = () => {
     const actual = parseFloat(actualDrawerCount);
     if (isNaN(actual)) {
-      alert('Please enter the actual cash counted in the drawer.');
+      soundManager.playError();
+      toast.warning('Please enter the actual cash counted in the drawer.', 'Count Required');
       return;
     }
     closeShift(actual);
     setShowCloseModal(false);
-    alert('Shift closed successfully. Print or file this Z-Report.');
+    toast.success('Shift closed successfully. Ready to print or file Z-Report.', 'Shift Closed');
   };
 
   const handleStartNew = () => {
     const floatVal = parseFloat(newStartingFloat) || 200;
     startNewShift(floatVal, newCashierName);
-    alert(`Started new shift for ${newCashierName} with ${settings.currencySymbol}${floatVal} float.`);
+    toast.info(
+      `Started new shift for ${newCashierName} with ${formatPrice(floatVal)} float.`,
+      'Shift Started'
+    );
   };
 
   return (
@@ -166,8 +175,7 @@ export default function ShiftReportView() {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p className="text-xs text-slate-400 uppercase font-medium">Shift Total Sales</p>
           <p className="text-2xl font-black text-emerald-400 font-mono mt-1">
-            {settings.currencySymbol}
-            {grossSales.toFixed(2)}
+            {formatPrice(grossSales)}
           </p>
           <p className="text-[11px] text-slate-500 mt-1">{completedOrders.length} orders settled</p>
         </div>
@@ -175,8 +183,7 @@ export default function ShiftReportView() {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p className="text-xs text-slate-400 uppercase font-medium">Opening Cash Float</p>
           <p className="text-2xl font-black text-slate-100 font-mono mt-1">
-            {settings.currencySymbol}
-            {shift.startingFloat.toFixed(2)}
+            {formatPrice(shift.startingFloat)}
           </p>
           <p className="text-[11px] text-slate-500 mt-1">Initial drawer float</p>
         </div>
@@ -185,19 +192,17 @@ export default function ShiftReportView() {
           <p className="text-xs text-slate-400 uppercase font-medium">Items Sold</p>
           <p className="text-2xl font-black text-sky-400 font-mono mt-1">{totalItemsSold} units</p>
           <p className="text-[11px] text-slate-500 mt-1">
-            Avg {settings.currencySymbol}
-            {avgTicket.toFixed(2)} / basket
+            Avg {formatPrice(avgTicket)} / basket
           </p>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p className="text-xs text-slate-400 uppercase font-medium">Expected Drawer Cash</p>
           <p className="text-2xl font-black text-amber-400 font-mono mt-1">
-            {settings.currencySymbol}
-            {expectedCashInDrawer.toFixed(2)}
+            {formatPrice(expectedCashInDrawer)}
           </p>
           <p className="text-[11px] text-slate-500 mt-1">
-            Float + Cash Sales - Drops ({settings.currencySymbol}{shift.cashDrops.toFixed(2)})
+            Float + Cash Sales - Drops ({formatPrice(shift.cashDrops)})
           </p>
         </div>
       </div>
@@ -226,8 +231,7 @@ export default function ShiftReportView() {
                 </div>
               </div>
               <span className="font-mono font-bold text-base text-emerald-400">
-                {settings.currencySymbol}
-                {cashSales.toFixed(2)}
+                {formatPrice(cashSales)}
               </span>
             </div>
 
@@ -245,8 +249,7 @@ export default function ShiftReportView() {
                 </div>
               </div>
               <span className="font-mono font-bold text-base text-sky-400">
-                {settings.currencySymbol}
-                {cardSales.toFixed(2)}
+                {formatPrice(cardSales)}
               </span>
             </div>
 
@@ -264,8 +267,7 @@ export default function ShiftReportView() {
                 </div>
               </div>
               <span className="font-mono font-bold text-base text-amber-400">
-                {settings.currencySymbol}
-                {qrSales.toFixed(2)}
+                {formatPrice(qrSales)}
               </span>
             </div>
           </div>
@@ -275,15 +277,13 @@ export default function ShiftReportView() {
             <div className="flex justify-between">
               <span>Total Sales Tax ({settings.taxRatePercent}%) Collected:</span>
               <span className="font-mono text-slate-200">
-                {settings.currencySymbol}
-                {totalTax.toFixed(2)}
+                {formatPrice(totalTax)}
               </span>
             </div>
             <div className="flex justify-between">
               <span>Total Discounts Granted:</span>
               <span className="font-mono text-slate-200">
-                {settings.currencySymbol}
-                {totalDiscounts.toFixed(2)}
+                {formatPrice(totalDiscounts)}
               </span>
             </div>
           </div>
@@ -300,32 +300,28 @@ export default function ShiftReportView() {
             <div className="flex justify-between">
               <span className="text-slate-400">Starting Float:</span>
               <span className="font-mono font-bold text-slate-200">
-                {settings.currencySymbol}
-                {shift.startingFloat.toFixed(2)}
+                {formatPrice(shift.startingFloat)}
               </span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-slate-400">(+) Cash Sales Received:</span>
               <span className="font-mono font-bold text-emerald-400">
-                +{settings.currencySymbol}
-                {cashSales.toFixed(2)}
+                +{formatPrice(cashSales)}
               </span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-slate-400">(-) Cash Drops / Skims to Safe:</span>
               <span className="font-mono font-bold text-rose-400">
-                -{settings.currencySymbol}
-                {shift.cashDrops.toFixed(2)}
+                -{formatPrice(shift.cashDrops)}
               </span>
             </div>
 
             <div className="pt-2 border-t border-slate-800 flex justify-between font-bold text-sm">
               <span className="text-slate-300">Expected In Drawer:</span>
               <span className="font-mono text-amber-400">
-                {settings.currencySymbol}
-                {expectedCashInDrawer.toFixed(2)}
+                {formatPrice(expectedCashInDrawer)}
               </span>
             </div>
 
@@ -334,8 +330,7 @@ export default function ShiftReportView() {
                 <div className="flex justify-between font-bold text-sm">
                   <span className="text-slate-300">Actual Counted Cash:</span>
                   <span className="font-mono text-white">
-                    {settings.currencySymbol}
-                    {shift.actualDrawerCash.toFixed(2)}
+                    {formatPrice(shift.actualDrawerCash)}
                   </span>
                 </div>
 
@@ -350,8 +345,7 @@ export default function ShiftReportView() {
                     Variance ({shift.actualDrawerCash >= expectedCashInDrawer ? 'Over' : 'Short'}):
                   </span>
                   <span className="font-mono">
-                    {settings.currencySymbol}
-                    {Math.abs(shift.actualDrawerCash - expectedCashInDrawer).toFixed(2)}
+                    {formatPrice(Math.abs(shift.actualDrawerCash - expectedCashInDrawer))}
                   </span>
                 </div>
               </>
@@ -383,12 +377,14 @@ export default function ShiftReportView() {
 
             <div className="space-y-3 mb-4">
               <div>
-                <label className="text-xs text-slate-300 block mb-1">Amount to Drop ($)</label>
+                <label className="text-xs text-slate-300 block mb-1">
+                  Amount to Drop ({settings.currencySymbol})
+                </label>
                 <input
                   type="number"
-                  step="0.01"
-                  min="1"
-                  placeholder="e.g. 100.00"
+                  step="1"
+                  min="50"
+                  placeholder="e.g. 5000"
                   value={cashDropAmount}
                   onChange={(e) => setCashDropAmount(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg font-mono font-bold text-sm"
@@ -438,11 +434,11 @@ export default function ShiftReportView() {
 
             <div className="mb-4">
               <label className="text-xs text-slate-300 block mb-1">
-                Actual Cash Counted in Drawer ($):
+                Actual Cash Counted in Drawer ({settings.currencySymbol}):
               </label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 placeholder={expectedCashInDrawer.toFixed(2)}
                 value={actualDrawerCount}
@@ -450,8 +446,7 @@ export default function ShiftReportView() {
                 className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-lg font-mono font-bold text-base"
               />
               <span className="text-[11px] text-slate-400 block mt-1">
-                Expected: {settings.currencySymbol}
-                {expectedCashInDrawer.toFixed(2)}
+                Expected: {formatPrice(expectedCashInDrawer)}
               </span>
             </div>
 

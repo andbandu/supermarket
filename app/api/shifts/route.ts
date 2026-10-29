@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
 import { CashierShift } from '@/types/pos';
 import { DEFAULT_SETTINGS } from '@/lib/mockData';
 
@@ -8,32 +8,28 @@ export async function GET(request: Request) {
   const auth = validateApiAuth(request);
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
-  const supabase = getSupabaseAdmin();
-  if (supabase && isSupabaseConfigured()) {
+  if (isPrismaConfigured()) {
     try {
-      const { data, error } = await supabase
-        .from('shifts')
-        .select('*')
-        .order('started_at', { ascending: false })
-        .limit(1)
-        .single();
+      const shift = await prisma.shift.findFirst({
+        orderBy: { startedAt: 'desc' },
+      });
 
-      if (!error && data) {
-        const shift: CashierShift = {
-          id: data.id,
-          cashierName: data.cashier_name,
-          startedAt: data.started_at,
-          endedAt: data.ended_at,
-          startingFloat: Number(data.starting_float),
-          cashDrops: Number(data.cash_drops || 0),
-          actualDrawerCash: data.actual_drawer_cash ? Number(data.actual_drawer_cash) : undefined,
-          notes: data.notes,
-          isClosed: Boolean(data.is_closed),
+      if (shift) {
+        const formatted: CashierShift = {
+          id: shift.id,
+          cashierName: shift.cashierName,
+          startedAt: shift.startedAt.toISOString(),
+          endedAt: shift.endedAt ? shift.endedAt.toISOString() : undefined,
+          startingFloat: shift.startingFloat,
+          cashDrops: shift.cashDrops,
+          actualDrawerCash: shift.actualDrawerCash ?? undefined,
+          notes: shift.notes ?? undefined,
+          isClosed: shift.isClosed,
         };
-        return NextResponse.json({ success: true, data: shift });
+        return NextResponse.json({ success: true, source: 'prisma_postgresql', data: formatted });
       }
-    } catch {
-      // fallback
+    } catch (err) {
+      console.error('Prisma shift query error:', err);
     }
   }
 
@@ -56,26 +52,34 @@ export async function POST(request: Request) {
 
   try {
     const body: CashierShift = await request.json();
-    const supabase = getSupabaseAdmin();
 
-    if (supabase && isSupabaseConfigured()) {
-      const { error } = await supabase.from('shifts').upsert([
-        {
-          id: body.id,
-          cashier_name: body.cashierName,
-          started_at: body.startedAt,
-          ended_at: body.endedAt,
-          starting_float: body.startingFloat,
-          cash_drops: body.cashDrops,
-          actual_drawer_cash: body.actualDrawerCash,
+    if (isPrismaConfigured()) {
+      const saved = await prisma.shift.upsert({
+        where: { id: body.id },
+        update: {
+          cashierName: body.cashierName,
+          startedAt: new Date(body.startedAt),
+          endedAt: body.endedAt ? new Date(body.endedAt) : null,
+          startingFloat: body.startingFloat,
+          cashDrops: body.cashDrops,
+          actualDrawerCash: body.actualDrawerCash,
           notes: body.notes,
-          is_closed: body.isClosed,
+          isClosed: body.isClosed,
         },
-      ]);
+        create: {
+          id: body.id,
+          cashierName: body.cashierName,
+          startedAt: new Date(body.startedAt),
+          endedAt: body.endedAt ? new Date(body.endedAt) : null,
+          startingFloat: body.startingFloat,
+          cashDrops: body.cashDrops,
+          actualDrawerCash: body.actualDrawerCash,
+          notes: body.notes,
+          isClosed: body.isClosed,
+        },
+      });
 
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-      }
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data: saved });
     }
 
     return NextResponse.json({ success: true, data: body });
@@ -86,4 +90,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

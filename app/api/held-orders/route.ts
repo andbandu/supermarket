@@ -1,34 +1,31 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { HeldOrder } from '@/types/pos';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
+import { HeldOrder, CartItem } from '@/types/pos';
 
 export async function GET(request: Request) {
   const auth = validateApiAuth(request);
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
-  const supabase = getSupabaseAdmin();
-  if (supabase && isSupabaseConfigured()) {
+  if (isPrismaConfigured()) {
     try {
-      const { data, error } = await supabase
-        .from('held_orders')
-        .select('*')
-        .order('held_at', { ascending: false });
+      const held = await prisma.heldOrder.findMany({
+        orderBy: { heldAt: 'desc' },
+      });
 
-      if (!error && data) {
-        const formatted: HeldOrder[] = data.map((row) => ({
-          id: row.id,
-          heldAt: row.held_at,
-          customerNote: row.customer_note,
-          items: row.items_json,
-          subtotal: Number(row.subtotal),
-          total: Number(row.total),
-          cashierName: row.cashier_name,
-        }));
-        return NextResponse.json({ success: true, data: formatted });
-      }
-    } catch {
-      // fallback
+      const formatted: HeldOrder[] = held.map((row) => ({
+        id: row.id,
+        heldAt: row.heldAt.toISOString(),
+        customerNote: row.customerNote,
+        items: row.itemsJson as unknown as CartItem[],
+        subtotal: row.subtotal,
+        total: row.total,
+        cashierName: row.cashierName,
+      }));
+
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data: formatted });
+    } catch (err) {
+      console.error('Prisma held orders query error:', err);
     }
   }
 
@@ -41,24 +38,29 @@ export async function POST(request: Request) {
 
   try {
     const body: HeldOrder = await request.json();
-    const supabase = getSupabaseAdmin();
 
-    if (supabase && isSupabaseConfigured()) {
-      const { error } = await supabase.from('held_orders').insert([
-        {
-          id: body.id,
-          held_at: body.heldAt || new Date().toISOString(),
-          customer_note: body.customerNote,
-          items_json: body.items,
+    if (isPrismaConfigured()) {
+      await prisma.heldOrder.upsert({
+        where: { id: body.id },
+        update: {
+          heldAt: new Date(body.heldAt || Date.now()),
+          customerNote: body.customerNote,
+          itemsJson: body.items as unknown as object,
           subtotal: body.subtotal,
           total: body.total,
-          cashier_name: body.cashierName,
+          cashierName: body.cashierName,
         },
-      ]);
-
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-      }
+        create: {
+          id: body.id,
+          heldAt: new Date(body.heldAt || Date.now()),
+          customerNote: body.customerNote,
+          itemsJson: body.items as unknown as object,
+          subtotal: body.subtotal,
+          total: body.total,
+          cashierName: body.cashierName,
+        },
+      });
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data: body });
     }
 
     return NextResponse.json({ success: true, data: body });
@@ -69,4 +71,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
 import { POSSettings } from '@/types/pos';
 import { DEFAULT_SETTINGS } from '@/lib/mockData';
 
@@ -8,31 +8,28 @@ export async function GET(request: Request) {
   const auth = validateApiAuth(request);
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
-  const supabase = getSupabaseAdmin();
-  if (supabase && isSupabaseConfigured()) {
+  if (isPrismaConfigured()) {
     try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('id', 1)
-        .single();
+      const data = await prisma.settings.findFirst({
+        where: { id: 1 },
+      });
 
-      if (!error && data) {
+      if (data) {
         const settings: POSSettings = {
-          storeName: data.store_name,
-          tagline: data.tagline,
-          storeAddress: data.store_address,
-          storePhone: data.store_phone,
-          taxRatePercent: Number(data.tax_rate_percent),
-          currencySymbol: data.currency_symbol,
-          receiptFooter: data.receipt_footer,
-          soundEnabled: Boolean(data.sound_enabled),
-          activeCashier: data.active_cashier,
+          storeName: data.storeName,
+          tagline: data.tagline ?? DEFAULT_SETTINGS.tagline,
+          storeAddress: data.storeAddress ?? DEFAULT_SETTINGS.storeAddress,
+          storePhone: data.storePhone ?? DEFAULT_SETTINGS.storePhone,
+          taxRatePercent: data.taxRatePercent,
+          currencySymbol: data.currencySymbol,
+          receiptFooter: data.receiptFooter ?? DEFAULT_SETTINGS.receiptFooter,
+          soundEnabled: data.soundEnabled,
+          activeCashier: data.activeCashier,
         };
-        return NextResponse.json({ success: true, data: settings });
+        return NextResponse.json({ success: true, source: 'prisma_postgresql', data: settings });
       }
-    } catch {
-      // fallback
+    } catch (err) {
+      console.error('Prisma settings query error:', err);
     }
   }
 
@@ -45,28 +42,36 @@ export async function POST(request: Request) {
 
   try {
     const body: Partial<POSSettings> = await request.json();
-    const supabase = getSupabaseAdmin();
 
-    if (supabase && isSupabaseConfigured()) {
-      const { error } = await supabase.from('settings').upsert([
-        {
-          id: 1,
-          store_name: body.storeName ?? DEFAULT_SETTINGS.storeName,
-          tagline: body.tagline ?? DEFAULT_SETTINGS.tagline,
-          store_address: body.storeAddress ?? DEFAULT_SETTINGS.storeAddress,
-          store_phone: body.storePhone ?? DEFAULT_SETTINGS.storePhone,
-          tax_rate_percent: body.taxRatePercent ?? DEFAULT_SETTINGS.taxRatePercent,
-          currency_symbol: body.currencySymbol ?? DEFAULT_SETTINGS.currencySymbol,
-          receipt_footer: body.receiptFooter ?? DEFAULT_SETTINGS.receiptFooter,
-          sound_enabled: body.soundEnabled ?? DEFAULT_SETTINGS.soundEnabled,
-          active_cashier: body.activeCashier ?? DEFAULT_SETTINGS.activeCashier,
-          updated_at: new Date().toISOString(),
+    if (isPrismaConfigured()) {
+      const data = await prisma.settings.upsert({
+        where: { id: 1 },
+        update: {
+          storeName: body.storeName,
+          tagline: body.tagline,
+          storeAddress: body.storeAddress,
+          storePhone: body.storePhone,
+          taxRatePercent: body.taxRatePercent,
+          currencySymbol: body.currencySymbol,
+          receiptFooter: body.receiptFooter,
+          soundEnabled: body.soundEnabled,
+          activeCashier: body.activeCashier,
         },
-      ]);
+        create: {
+          id: 1,
+          storeName: body.storeName ?? DEFAULT_SETTINGS.storeName,
+          tagline: body.tagline ?? DEFAULT_SETTINGS.tagline,
+          storeAddress: body.storeAddress ?? DEFAULT_SETTINGS.storeAddress,
+          storePhone: body.storePhone ?? DEFAULT_SETTINGS.storePhone,
+          taxRatePercent: body.taxRatePercent ?? DEFAULT_SETTINGS.taxRatePercent,
+          currencySymbol: body.currencySymbol ?? DEFAULT_SETTINGS.currencySymbol,
+          receiptFooter: body.receiptFooter ?? DEFAULT_SETTINGS.receiptFooter,
+          soundEnabled: body.soundEnabled ?? DEFAULT_SETTINGS.soundEnabled,
+          activeCashier: body.activeCashier ?? DEFAULT_SETTINGS.activeCashier,
+        },
+      });
 
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-      }
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', data });
     }
 
     return NextResponse.json({ success: true, data: body });
@@ -77,4 +82,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

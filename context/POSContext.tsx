@@ -14,6 +14,8 @@ import {
 import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '@/lib/mockData';
 import { soundManager } from '@/lib/sound';
 import { apiClient } from '@/lib/apiClient';
+import { toast } from '@/context/ToastContext';
+import { formatCurrency } from '@/lib/currency';
 
 interface POSContextType {
   products: Product[];
@@ -53,6 +55,7 @@ interface POSContextType {
   cartTax: number;
   cartTotal: number;
   cartItemCount: number;
+  formatPrice: (amount: number | string | undefined | null) => string;
 
   // Held Orders
   holdCurrentCart: (customerNote?: string) => void;
@@ -61,7 +64,7 @@ interface POSContextType {
 
   // Checkout & Transactions
   processPayment: (paymentMethod: PaymentMethod, amountTendered: number, notes?: string) => Order | null;
-  refundOrder: (orderId: string, reason: string) => void;
+  refundOrder: (orderId: string, reason: string) => Promise<{ success: boolean; message?: string; error?: string }>;
 
   // Inventory Management
   addProduct: (product: Omit<Product, 'id'>) => void;
@@ -114,8 +117,19 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       // 1. Health check
       const health = await apiClient.checkHealth();
       if (health && health.database) {
-        setDbSource(health.database);
-        setIsSupabaseLive(health.database.includes('Supabase'));
+        const dbStatus =
+          typeof health.database === 'object' ? health.database.status : String(health.database);
+        const isLive =
+          typeof health.database === 'object'
+            ? Boolean(
+                health.database.prismaConfigured ||
+                health.database.supabaseConfigured ||
+                dbStatus?.includes('Connected')
+              )
+            : Boolean(dbStatus?.includes('Connected') || dbStatus?.includes('Supabase'));
+
+        setDbSource(dbStatus || 'Connected');
+        setIsSupabaseLive(isLive);
       }
 
       // 2. Products from API
@@ -146,10 +160,25 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const savedProducts = localStorage.getItem('minimart_pos_products');
-      if (savedProducts) setProducts(JSON.parse(savedProducts));
+      if (savedProducts) {
+        const parsedProds = JSON.parse(savedProducts);
+        // Automatically migrate if old USD prices were cached
+        if (Array.isArray(parsedProds) && parsedProds.length > 0 && parsedProds[0].price < 50) {
+          setProducts(INITIAL_PRODUCTS);
+          localStorage.setItem('minimart_pos_products', JSON.stringify(INITIAL_PRODUCTS));
+        } else {
+          setProducts(parsedProds);
+        }
+      }
 
       const savedSettings = localStorage.getItem('minimart_pos_settings');
-      if (savedSettings) setSettings(JSON.parse(savedSettings));
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(savedSettings);
+        if (!parsedSettings.currencySymbol || !['LKR', 'Rs.', 'රු.'].includes(parsedSettings.currencySymbol)) {
+          parsedSettings.currencySymbol = 'LKR';
+        }
+        setSettings((prev) => ({ ...prev, ...parsedSettings }));
+      }
 
       const savedCart = localStorage.getItem('minimart_pos_cart');
       if (savedCart) setCart(JSON.parse(savedCart));
@@ -168,7 +197,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
           id: 'shift-' + Date.now(),
           cashierName: DEFAULT_SETTINGS.activeCashier,
           startedAt: new Date().toISOString(),
-          startingFloat: 200.0,
+          startingFloat: 5000.0,
           cashDrops: 0,
           isClosed: false,
         });
@@ -245,6 +274,13 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
+  const formatPrice = useCallback(
+    (amount: number | string | undefined | null): string => {
+      return formatCurrency(amount, settings.currencySymbol);
+    },
+    [settings.currencySymbol]
+  );
+
   // Cart operations
   const addToCart = useCallback((product: Product, qty: number = 1) => {
     const existing = cart.find((i) => i.product.id === product.id);
@@ -252,7 +288,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
     if (currentQtyInCart + qty > product.stock) {
       soundManager.playError();
-      alert(`Cannot add more "${product.name}". Only ${product.stock} left in stock.`);
+      toast.warning(`Cannot add more "${product.name}". Only ${product.stock} left in stock.`, 'Stock Limit Reached');
       return;
     }
 
@@ -303,7 +339,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
       if (newQty > target.product.stock) {
         soundManager.playError();
-        alert(`Cannot exceed available stock of ${target.product.stock} units.`);
+        toast.warning(`Cannot exceed available stock of ${target.product.stock} units.`, 'Stock Limit Reached');
         return prev;
       }
 
@@ -326,7 +362,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
       if (quantity > target.product.stock) {
         soundManager.playError();
-        alert(`Maximum available stock is ${target.product.stock}.`);
+        toast.warning(`Maximum available stock is ${target.product.stock}.`, 'Stock Limit Reached');
         return prev;
       }
 
@@ -488,6 +524,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       // 4. Concurrently push to Secure Next.js API -> Supabase PostgreSQL
       apiClient
         .createOrder({
+          id: completedOrder.id,
+          receiptNumber: completedOrder.receiptNumber,
+          timestamp: completedOrder.timestamp,
           items: completedOrder.items,
           subtotal: completedOrder.subtotal,
           discountAmount: completedOrder.discountAmount,
@@ -499,6 +538,20 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
           cashierName: completedOrder.cashierName,
           notes: completedOrder.notes,
         })
+        .then((res) => {
+          if (res && res.data) {
+            setOrders((prev) =>
+              prev.map((o) =>
+                o.id === completedOrder.id
+                  ? { ...o, id: res.data.id, receiptNumber: res.data.receiptNumber }
+                  : o
+              )
+            );
+            refreshFromApi();
+          } else if (res && !res.success) {
+            console.error('Database order creation returned error:', res.error);
+          }
+        })
         .catch((err) => console.error('Failed to sync order to API:', err));
 
       return completedOrder;
@@ -506,44 +559,64 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     [cart, cartSubtotal, cartTax, cartTotal, settings.activeCashier]
   );
 
-  const refundOrder = useCallback((orderId: string, reason: string) => {
-    const target = orders.find((o) => o.id === orderId);
-    if (!target || target.status === 'REFUNDED') return;
+  const refundOrder = useCallback(
+    async (
+      orderId: string,
+      reason: string
+    ): Promise<{ success: boolean; message?: string; error?: string }> => {
+      const target = orders.find((o) => o.id === orderId || o.receiptNumber === orderId);
+      if (!target || target.status === 'REFUNDED') {
+        return { success: false, error: 'Order not found or already refunded' };
+      }
 
-    // Restore stock locally
-    setProducts((prev) =>
-      prev.map((prod) => {
-        const returnedItem = target.items.find((i) => i.productId === prod.id);
-        if (returnedItem) {
+      // Restore stock locally
+      setProducts((prev) =>
+        prev.map((prod) => {
+          const returnedItem = target.items.find((i) => i.productId === prod.id);
+          if (returnedItem) {
+            return {
+              ...prod,
+              stock: prod.stock + returnedItem.quantity,
+            };
+          }
+          return prod;
+        })
+      );
+
+      // Update order status locally
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === target.id
+            ? {
+                ...o,
+                status: 'REFUNDED',
+                refundReason: reason || 'Customer requested return / refund',
+              }
+            : o
+        )
+      );
+
+      soundManager.playClick();
+
+      // Call API refund endpoint to update database & restore stock
+      try {
+        const res = await apiClient.refundOrder(target.id, reason);
+        if (res && res.success) {
+          await refreshFromApi();
           return {
-            ...prod,
-            stock: prod.stock + returnedItem.quantity,
+            success: true,
+            message: res.message || 'Refund successfully updated in database.',
           };
+        } else {
+          return { success: false, error: res?.error || 'Database refund update failed' };
         }
-        return prod;
-      })
-    );
-
-    // Update order status locally
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              status: 'REFUNDED',
-              refundReason: reason || 'Customer requested return / refund',
-            }
-          : o
-      )
-    );
-
-    soundManager.playClick();
-
-    // Call API refund endpoint
-    apiClient.refundOrder(orderId, reason).catch((err) => {
-      console.error('Failed to sync refund to API:', err);
-    });
-  }, [orders]);
+      } catch (err: unknown) {
+        console.error('Failed to sync refund to API:', err);
+        return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+      }
+    },
+    [orders, refreshFromApi]
+  );
 
   const addProduct = useCallback((newProd: Omit<Product, 'id'>) => {
     const id = 'prod-' + Date.now().toString().slice(-6);
@@ -606,13 +679,13 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         cashDrops: prev.cashDrops + amount,
         notes:
           (prev.notes ? prev.notes + '\n' : '') +
-          `Cash drop: $${amount} (${reason}) at ${new Date().toLocaleTimeString()}`,
+          `Cash drop: ${formatCurrency(amount, settings.currencySymbol)} (${reason}) at ${new Date().toLocaleTimeString()}`,
       };
       apiClient.saveShift(updated).catch(() => {});
       return updated;
     });
     soundManager.playCashDrawer();
-  }, []);
+  }, [settings.currencySymbol]);
 
   const closeShift = useCallback((actualCashInDrawer: number, notes?: string) => {
     setShift((prev) => {
@@ -689,6 +762,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         cartTax,
         cartTotal,
         cartItemCount,
+        formatPrice,
         holdCurrentCart,
         resumeHeldOrder,
         deleteHeldOrder,

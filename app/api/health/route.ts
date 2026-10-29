@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   const auth = validateApiAuth(request);
@@ -8,26 +9,17 @@ export async function GET(request: Request) {
     return unauthorizedResponse(auth.error);
   }
 
-  const supabaseConfigured = isSupabaseConfigured();
+  const prismaConfigured = isPrismaConfigured();
   let dbStatus = 'Not Connected (using Local Fallback)';
   let productsCount = 0;
 
-  if (supabaseConfigured) {
-    const supabase = getSupabaseAdmin();
-    if (supabase) {
-      try {
-        const { count, error } = await supabase
-          .from('products')
-          .select('*', { count: 'exact', head: true });
-        if (!error) {
-          dbStatus = 'Connected to Supabase PostgreSQL';
-          productsCount = count || 0;
-        } else {
-          dbStatus = `Supabase Error: ${error.message}`;
-        }
-      } catch (err: unknown) {
-        dbStatus = `Connection failed: ${err instanceof Error ? err.message : String(err)}`;
-      }
+  if (prismaConfigured) {
+    try {
+      const count = await prisma.product.count();
+      dbStatus = 'Connected to PostgreSQL via Prisma ORM';
+      productsCount = count;
+    } catch (err: unknown) {
+      dbStatus = `Prisma connection failed: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
 
@@ -35,9 +27,11 @@ export async function GET(request: Request) {
     status: 'online',
     version: '1.0.0',
     service: 'Minimart POS Secure API',
+    orm: 'Prisma ORM (v6)',
     database: {
       type: 'PostgreSQL (Supabase)',
-      configured: supabaseConfigured,
+      prismaConfigured,
+      supabaseConfigured: isSupabaseConfigured(),
       status: dbStatus,
       productsCount,
     },
@@ -48,4 +42,3 @@ export async function GET(request: Request) {
     timestamp: new Date().toISOString(),
   });
 }
-

@@ -1,0 +1,115 @@
+// ==============================================================================
+// PRISMA SCHEMA FOR MINIMART POS (SUPABASE POSTGRESQL)
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id           String      @id
+  barcode      String      @unique
+  name         String
+  category     String
+  price        Float
+  costPrice    Float       @map("cost_price")
+  stock        Int
+  reorderLevel Int         @default(5) @map("reorder_level")
+  unit         String      @default("pcs")
+  color        String?
+  iconName     String?     @map("icon_name")
+  isTaxable    Boolean     @default(true) @map("is_taxable")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  orderItems   OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id             String      @id
+  receiptNumber  String      @unique @map("receipt_number")
+  timestamp      DateTime    @default(now())
+  subtotal       Float
+  discountAmount Float       @default(0.0) @map("discount_amount")
+  taxAmount      Float       @default(0.0) @map("tax_amount")
+  total          Float
+  paymentMethod  String      @map("payment_method")
+  amountTendered Float       @map("amount_tendered")
+  changeGiven    Float       @default(0.0) @map("change_given")
+  cashierName    String      @map("cashier_name")
+  status         String      @default("COMPLETED")
+  refundReason   String?     @map("refund_reason")
+  notes          String?
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  items          OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @default(uuid())
+  orderId         String   @map("order_id")
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String?  @map("product_id")
+  product         Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName     String   @map("product_name")
+  barcode         String
+  quantity        Int
+  unitPrice       Float    @map("unit_price")
+  discountPercent Float    @default(0.0) @map("discount_percent")
+  totalPrice      Float    @map("total_price")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("order_items")
+}
+
+model HeldOrder {
+  id           String   @id
+  heldAt       DateTime @default(now()) @map("held_at")
+  customerNote String   @map("customer_note")
+  itemsJson    Json     @map("items_json")
+  subtotal     Float
+  total        Float
+  cashierName  String   @map("cashier_name")
+
+  @@map("held_orders")
+}
+
+model Shift {
+  id               String    @id
+  cashierName      String    @map("cashier_name")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  endedAt          DateTime? @map("ended_at")
+  startingFloat    Float     @default(200.0) @map("starting_float")
+  cashDrops        Float     @default(0.0) @map("cash_drops")
+  actualDrawerCash Float?    @map("actual_drawer_cash")
+  notes            String?
+  isClosed         Boolean   @default(false) @map("is_closed")
+
+  @@map("shifts")
+}
+
+model Settings {
+  id             Int      @id @default(1)
+  storeName      String   @default("MINIMART EXPRESS") @map("store_name")
+  tagline        String?  @default("Your 24/7 Neighborhood Convenience Store")
+  storeAddress   String?  @default("124 Market Boulevard, Suite #102") @map("store_address")
+  storePhone     String?  @default("(555) 789-2044") @map("store_phone")
+  taxRatePercent Float    @default(7.0) @map("tax_rate_percent")
+  currencySymbol String   @default("$") @map("currency_symbol")
+  receiptFooter  String?  @default("Thank you for shopping with us! Please come again.") @map("receipt_footer")
+  soundEnabled   Boolean  @default(true) @map("sound_enabled")
+  activeCashier  String   @default("Sarah Jenkins (Cashier #04)") @map("active_cashier")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+

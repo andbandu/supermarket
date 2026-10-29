@@ -19,8 +19,30 @@ class MinimartApiClient {
   }
 
   // Health check
-  async checkHealth(): Promise<{ status: string; database: string; message: string }> {
+  async checkHealth(): Promise<{
+    status: string;
+    version?: string;
+    service?: string;
+    orm?: string;
+    database: {
+      type: string;
+      prismaConfigured?: boolean;
+      supabaseConfigured?: boolean;
+      status: string;
+      productsCount?: number;
+    } | string;
+    message?: string;
+  }> {
     const res = await fetch(`${this.baseUrl}/health`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // Sync offline/local orders to Supabase PostgreSQL
+  async syncToDatabase(): Promise<{ success: boolean; message?: string; error?: string; data?: unknown }> {
+    const res = await fetch(`${this.baseUrl}/sync-to-supabase`, {
+      method: 'POST',
       headers: this.getHeaders(),
     });
     return res.json();
@@ -78,6 +100,9 @@ class MinimartApiClient {
   }
 
   async createOrder(orderPayload: {
+    id?: string;
+    receiptNumber?: string;
+    timestamp?: string;
     items: Array<{
       productId: string;
       productName: string;
@@ -96,7 +121,7 @@ class MinimartApiClient {
     changeGiven: number;
     cashierName: string;
     notes?: string;
-  }): Promise<{ success: boolean; data: Order }> {
+  }): Promise<{ success: boolean; data: Order; error?: string }> {
     const res = await fetch(`${this.baseUrl}/orders`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -105,12 +130,18 @@ class MinimartApiClient {
     return res.json();
   }
 
-  async refundOrder(orderId: string, reason: string): Promise<{ success: boolean; data: Order }> {
-    const res = await fetch(`${this.baseUrl}/orders/${orderId}/refund`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ reason }),
-    });
+  async refundOrder(
+    orderIdOrReceiptNumber: string,
+    reason: string
+  ): Promise<{ success: boolean; message?: string; data?: Order; error?: string }> {
+    const res = await fetch(
+      `${this.baseUrl}/orders/${encodeURIComponent(orderIdOrReceiptNumber)}/refund`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ reason }),
+      }
+    );
     return res.json();
   }
 
@@ -175,4 +206,3 @@ class MinimartApiClient {
 }
 
 export const apiClient = new MinimartApiClient();
-

@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { soundManager } from '@/lib/sound';
+import { toast } from '@/context/ToastContext';
 import {
   Settings as SettingsIcon,
   Store,
-  DollarSign,
+  Banknote,
   Percent,
   Receipt,
   User,
@@ -51,6 +52,7 @@ export default function SettingsView() {
 
     soundManager.playSuccess();
     setSavedSuccess(true);
+    toast.success('Store configuration saved successfully', 'Settings Updated');
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
@@ -133,7 +135,7 @@ export default function SettingsView() {
           {/* Section: Tax, Currency & Cashier */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
             <h3 className="font-bold text-sm text-slate-200 flex items-center gap-2 border-b border-slate-800 pb-3">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
+              <Banknote className="w-4 h-4 text-emerald-400" />
               Tax, Currency & Register
             </h3>
 
@@ -145,14 +147,9 @@ export default function SettingsView() {
                   onChange={(e) => setFormData({ ...formData, currencySymbol: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-xl focus:border-emerald-500"
                 >
-                  <option value="$">$ (USD / CAD / AUD / SGD)</option>
-                  <option value="€">€ (EUR)</option>
-                  <option value="£">£ (GBP)</option>
-                  <option value="¥">¥ (JPY / CNY)</option>
-                  <option value="₹">₹ (INR)</option>
-                  <option value="฿">฿ (THB)</option>
-                  <option value="RM">RM (MYR)</option>
-                  <option value="₱">₱ (PHP)</option>
+                  <option value="LKR">LKR (Sri Lankan Rupee)</option>
+                  <option value="Rs.">Rs. (Sri Lankan Rupee)</option>
+                  <option value="රු.">රු. (Sri Lankan Rupee - Sinhala)</option>
                 </select>
               </div>
 

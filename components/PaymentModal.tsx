@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { PaymentMethod } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
+import { toast } from '@/context/ToastContext';
 import {
   X,
   Banknote,
@@ -22,7 +23,7 @@ interface PaymentModalProps {
 }
 
 export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
-  const { cartTotal, settings, processPayment } = usePOS();
+  const { cartTotal, settings, processPayment, formatPrice } = usePOS();
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [tenderedStr, setTenderedStr] = useState<string>('');
@@ -47,9 +48,9 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
   const changeDue = Math.max(0, tenderedAmount - cartTotal);
   const isCashInsufficient = paymentMethod === 'CASH' && tenderedAmount < cartTotal;
 
-  // Quick cash buttons
-  const commonDenominations = [5, 10, 20, 50, 100];
-  const nextRoundUp = Math.ceil(cartTotal / 5) * 5;
+  // Sri Lankan Rupee denominations: Rs. 100, 500, 1000, 2000, 5000
+  const commonDenominations = [100, 500, 1000, 2000, 5000];
+  const nextRoundUp = Math.ceil(cartTotal / 100) * 100;
 
   const handleQuickCash = (amount: number) => {
     soundManager.playClick();
@@ -59,7 +60,10 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
   const handleExecutePayment = async () => {
     if (isCashInsufficient) {
       soundManager.playError();
-      alert(`Tendered cash is less than total due (${settings.currencySymbol}${cartTotal.toFixed(2)}).`);
+      toast.error(
+        `Tendered cash is less than total due (${formatPrice(cartTotal)}).`,
+        'Insufficient Cash'
+      );
       return;
     }
 
@@ -76,6 +80,10 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
     }
 
     processPayment(paymentMethod, tenderedAmount);
+    toast.success(
+      `Received ${formatPrice(cartTotal)} via ${paymentMethod}`,
+      'Payment Complete'
+    );
     setIsProcessing(false);
   };
 
@@ -109,8 +117,7 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
             Amount Due
           </span>
           <span className="text-3xl font-black text-emerald-400 font-mono tracking-tight">
-            {settings.currencySymbol}
-            {cartTotal.toFixed(2)}
+            {formatPrice(cartTotal)}
           </span>
         </div>
 
@@ -181,7 +188,7 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                     min="0"
                     value={tenderedStr}
                     onChange={(e) => setTenderedStr(e.target.value)}
-                    className="w-full bg-slate-950 text-white pl-9 pr-4 py-2.5 rounded-xl border border-slate-700 focus:border-emerald-500 text-xl font-mono font-bold"
+                    className="w-full bg-slate-950 text-white pl-16 pr-4 py-2.5 rounded-xl border border-slate-700 focus:border-emerald-500 text-xl font-mono font-bold"
                   />
                 </div>
               </div>
@@ -193,7 +200,7 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                   onClick={() => handleQuickCash(cartTotal)}
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold border border-slate-700 transition"
                 >
-                  Exact ({settings.currencySymbol}{cartTotal.toFixed(2)})
+                  Exact ({formatPrice(cartTotal)})
                 </button>
                 {nextRoundUp > cartTotal && (
                   <button
@@ -201,7 +208,7 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                     onClick={() => handleQuickCash(nextRoundUp)}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-xs font-semibold border border-slate-700 transition"
                   >
-                    Round Up ({settings.currencySymbol}{nextRoundUp.toFixed(2)})
+                    Round Up ({formatPrice(nextRoundUp)})
                   </button>
                 )}
                 {commonDenominations.map((val) => (
@@ -211,7 +218,7 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                     onClick={() => handleQuickCash(val)}
                     className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono font-bold border border-slate-700 transition"
                   >
-                    {settings.currencySymbol}{val}
+                    {formatPrice(val)}
                   </button>
                 ))}
               </div>
@@ -243,10 +250,11 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                 </div>
 
                 <span className="text-2xl font-black font-mono">
-                  {settings.currencySymbol}
-                  {isCashInsufficient
-                    ? (cartTotal - tenderedAmount).toFixed(2)
-                    : changeDue.toFixed(2)}
+                  {formatPrice(
+                    isCashInsufficient
+                      ? cartTotal - tenderedAmount
+                      : changeDue
+                  )}
                 </span>
               </div>
             </div>
@@ -292,8 +300,8 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                 <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-bold text-slate-300 border border-slate-700">
                   Mastercard
                 </span>
-                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-bold text-slate-300 border border-slate-700">
-                  Apple Pay
+                <span className="px-2.5 py-1 rounded bg-slate-800 text-[11px] font-bold text-emerald-400 border border-emerald-700/50">
+                  LankaPay
                 </span>
               </div>
             </div>
@@ -306,17 +314,17 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
                 <div className="w-32 h-32 bg-slate-900 rounded-lg p-2 flex flex-col items-center justify-center text-emerald-400 relative">
                   <QrCode className="w-20 h-20 text-white" />
                   <span className="text-[9px] font-mono text-emerald-400 font-bold mt-1">
-                    SCAN TO PAY {settings.currencySymbol}{cartTotal.toFixed(2)}
+                    LANKAQR &bull; {formatPrice(cartTotal)}
                   </span>
                 </div>
               </div>
 
               <div>
                 <h4 className="font-bold text-slate-100 text-sm">
-                  {qrState === 'scanned' ? 'QR Code Scanned!' : 'Scan with Mobile Banking / Wallet'}
+                  {qrState === 'scanned' ? 'LANKAQR Scanned!' : 'Scan with Any Sri Lankan Banking App'}
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Supports PayPal, Venmo, PromptPay, UPI, WeChat & Alipay
+                  Supports LANKAQR, Dialog genie, FriMi, Flash, ComBank Q+, HNB SOLO & Seylan Pay
                 </p>
               </div>
             </div>
@@ -353,7 +361,7 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                <span>Confirm Payment ({settings.currencySymbol}{cartTotal.toFixed(2)})</span>
+                <span>Confirm Payment ({formatPrice(cartTotal)})</span>
               </>
             )}
           </button>

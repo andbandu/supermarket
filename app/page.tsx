@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { POSProvider, usePOS } from '@/context/POSContext';
+import { ToastProvider } from '@/context/ToastContext';
 import Navbar from '@/components/Navbar';
 import POSView from '@/components/POSView';
 import InventoryView from '@/components/InventoryView';
@@ -121,8 +122,10 @@ function POSMainApp() {
 
 export default function Home() {
   return (
-    <POSProvider>
-      <POSMainApp />
-    </POSProvider>
+    <ToastProvider>
+      <POSProvider>
+        <POSMainApp />
+      </POSProvider>
+    </ToastProvider>
   );
 }

@@ -11,7 +11,7 @@ interface ReceiptModalProps {
 }
 
 export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
-  const { lastCompletedOrder, settings } = usePOS();
+  const { lastCompletedOrder, settings, isSupabaseLive, formatPrice } = usePOS();
 
   if (!isOpen || !lastCompletedOrder) return null;
 
@@ -91,14 +91,12 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
                     <div className="flex justify-between font-medium">
                       <span className="truncate pr-2">{item.productName}</span>
                       <span className="shrink-0 font-bold">
-                        {settings.currencySymbol}
-                        {item.totalPrice.toFixed(2)}
+                        {formatPrice(item.totalPrice)}
                       </span>
                     </div>
                     <div className="flex justify-between text-[10px] text-zinc-600">
                       <span>
-                        {item.quantity} x {settings.currencySymbol}
-                        {item.unitPrice.toFixed(2)}
+                        {item.quantity} x {formatPrice(item.unitPrice)}
                         {item.discountPercent > 0 && ` (-${item.discountPercent}%)`}
                       </span>
                       <span>#{item.barcode.slice(-4)}</span>
@@ -112,36 +110,24 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
             <div className="py-2.5 border-b border-dashed border-zinc-400 space-y-1 text-[11px]">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
-                <span>
-                  {settings.currencySymbol}
-                  {order.subtotal.toFixed(2)}
-                </span>
+                <span>{formatPrice(order.subtotal)}</span>
               </div>
 
               {order.discountAmount > 0 && (
                 <div className="flex justify-between text-zinc-600">
                   <span>Total Discount:</span>
-                  <span>
-                    -{settings.currencySymbol}
-                    {order.discountAmount.toFixed(2)}
-                  </span>
+                  <span>-{formatPrice(order.discountAmount)}</span>
                 </div>
               )}
 
               <div className="flex justify-between">
                 <span>Tax ({settings.taxRatePercent}%):</span>
-                <span>
-                  {settings.currencySymbol}
-                  {order.taxAmount.toFixed(2)}
-                </span>
+                <span>{formatPrice(order.taxAmount)}</span>
               </div>
 
               <div className="flex justify-between font-black text-sm pt-1.5 border-t border-zinc-400">
                 <span>TOTAL DUE:</span>
-                <span>
-                  {settings.currencySymbol}
-                  {order.total.toFixed(2)}
-                </span>
+                <span>{formatPrice(order.total)}</span>
               </div>
             </div>
 
@@ -155,17 +141,11 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
                 <>
                   <div className="flex justify-between">
                     <span>Cash Tendered:</span>
-                    <span>
-                      {settings.currencySymbol}
-                      {order.amountTendered.toFixed(2)}
-                    </span>
+                    <span>{formatPrice(order.amountTendered)}</span>
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>Change Given:</span>
-                    <span>
-                      {settings.currencySymbol}
-                      {order.changeGiven.toFixed(2)}
-                    </span>
+                    <span>{formatPrice(order.changeGiven)}</span>
                   </div>
                 </>
               )}
@@ -182,6 +162,20 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Database Status Notification Banner */}
+        <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-[11px] no-print">
+          <span className="text-slate-400">Database Record:</span>
+          {isSupabaseLive ? (
+            <span className="text-emerald-400 font-semibold">
+              ✓ Synced to Supabase PostgreSQL
+            </span>
+          ) : (
+            <span className="text-amber-400 font-semibold" title="Add DATABASE_URL to .env.local to sync to cloud">
+              💾 Stored in Local File DB
+            </span>
+          )}
         </div>
 
         {/* Modal Bottom Buttons */}

@@ -11,7 +11,7 @@ interface HeldOrdersModalProps {
 }
 
 export default function HeldOrdersModal({ isOpen, onClose }: HeldOrdersModalProps) {
-  const { heldOrders, resumeHeldOrder, deleteHeldOrder, settings } = usePOS();
+  const { heldOrders, resumeHeldOrder, deleteHeldOrder, settings, formatPrice } = usePOS();
 
   if (!isOpen) return null;
 
@@ -80,8 +80,7 @@ export default function HeldOrdersModal({ isOpen, onClose }: HeldOrdersModalProp
                   </div>
 
                   <p className="text-xs font-bold text-emerald-400 font-mono">
-                    Total: {settings.currencySymbol}
-                    {held.total.toFixed(2)}
+                    Total: {formatPrice(held.total)}
                   </p>
                 </div>
 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { soundManager } from '@/lib/sound';
+import { toast } from '@/context/ToastContext';
 import {
   Store,
   ShoppingCart,
@@ -58,7 +59,7 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
 
   const handleOpenDrawer = () => {
     soundManager.playCashDrawer();
-    alert('Cash drawer opened successfully (Kick signal sent).');
+    toast.info('Cash drawer opened successfully (Kick signal sent to printer).', 'Drawer Opened');
   };
 
   const toggleSound = () => {
@@ -66,6 +67,9 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
     updateSettings({ soundEnabled: nextState });
     if (nextState) {
       soundManager.playBeep();
+      toast.info('Sound effects enabled', 'Audio Feedback');
+    } else {
+      toast.info('Sound effects muted', 'Audio Feedback');
     }
   };
 
@@ -83,7 +87,7 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
                 {settings.storeName}
               </span>
 
-              {/* Supabase & Mobile API Status Pill */}
+              {/* Prisma ORM, Supabase & Mobile API Status Pill */}
               <button
                 onClick={() => setShowApiModal(true)}
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition ${
@@ -91,10 +95,10 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
                     : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25'
                 }`}
-                title="Click to view Supabase PostgreSQL & Mobile API status"
+                title="Click to view Prisma ORM, Supabase PostgreSQL & Mobile API status"
               >
                 <Database className="w-3 h-3" />
-                <span>{isSupabaseLive ? 'Supabase Postgres' : 'Postgres API'}</span>
+                <span>{isSupabaseLive ? 'Prisma & Postgres Live' : 'Prisma ORM'}</span>
                 {isSyncing ? (
                   <RefreshCw className="w-2.5 h-2.5 animate-spin ml-0.5 text-cyan-400" />
                 ) : (
@@ -278,10 +282,10 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
                 <Database className="w-5 h-5 text-emerald-400" />
                 <div>
                   <h3 className="font-bold text-sm text-white">
-                    Supabase PostgreSQL & Mobile App API
+                    Prisma ORM & PostgreSQL (Supabase) Database
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Secure endpoints ready for web and mobile apps
+                    Type-safe Prisma client & secure REST API for web and mobile
                   </p>
                 </div>
               </div>
@@ -300,18 +304,16 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
                   {isSupabaseLive ? (
                     <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                   ) : (
-                    <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
                   )}
                   <div>
                     <h4 className="font-bold text-slate-200">
                       {isSupabaseLive
-                        ? 'Supabase PostgreSQL: Connected & Live'
-                        : 'PostgreSQL Database: Local API Active'}
+                        ? 'PostgreSQL: Live Connected via Prisma ORM'
+                        : 'Prisma ORM: Configured with Local Fallback'}
                     </h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      {isSupabaseLive
-                        ? 'All products, sales, and inventory changes persist directly to Supabase cloud PostgreSQL.'
-                        : 'To link your Supabase account, add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to .env.local.'}
+                      To connect your Supabase database, set <code className="text-emerald-400 font-mono">DATABASE_URL</code> in <code className="text-slate-200 font-mono">.env.local</code> and run <code className="text-emerald-400 font-mono">npx prisma db push</code>.
                     </p>
                   </div>
                 </div>
@@ -324,6 +326,19 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
                   <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
                   <span>Sync Now</span>
                 </button>
+              </div>
+
+              {/* Prisma Commands Quick Guide */}
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-slate-200 flex items-center gap-1.5 text-xs">
+                  <Code2 className="w-4 h-4 text-emerald-400" />
+                  Prisma ORM Commands
+                </h4>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] space-y-1.5 text-slate-300">
+                  <p><span className="text-slate-500"># Sync schema to Supabase PostgreSQL:</span><br /><span className="text-emerald-400 font-bold">npx prisma db push</span></p>
+                  <p><span className="text-slate-500"># Seed default 27 minimart goods:</span><br /><span className="text-emerald-400 font-bold">npx prisma db seed</span></p>
+                  <p><span className="text-slate-500"># Open Prisma visual database browser:</span><br /><span className="text-sky-400 font-bold">npx prisma studio</span></p>
+                </div>
               </div>
 
               {/* Mobile App Connection Guide */}

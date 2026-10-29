@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { Product, ProductCategory } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
+import { toast } from '@/context/ToastContext';
 import {
   Boxes,
   Plus,
@@ -32,7 +33,7 @@ const CATEGORIES: ProductCategory[] = [
 ];
 
 export default function InventoryView() {
-  const { products, addProduct, updateProduct, restockProduct, deleteProduct, settings } = usePOS();
+  const { products, addProduct, updateProduct, restockProduct, deleteProduct, settings, formatPrice } = usePOS();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -91,7 +92,8 @@ export default function InventoryView() {
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.barcode) {
-      alert('Please provide Product Name and Barcode.');
+      soundManager.playError();
+      toast.warning('Please provide both Product Name and Barcode.', 'Missing Information');
       return;
     }
 
@@ -113,6 +115,7 @@ export default function InventoryView() {
         unit: formData.unit,
         isTaxable: formData.isTaxable,
       });
+      toast.success(`"${formData.name}" updated successfully`, 'Product Saved');
       setEditingProduct(null);
     } else {
       addProduct({
@@ -128,6 +131,7 @@ export default function InventoryView() {
         iconName: 'Package',
         isTaxable: formData.isTaxable,
       });
+      toast.success(`"${formData.name}" added to inventory`, 'Product Created');
       setIsAddModalOpen(false);
     }
   };
@@ -161,6 +165,7 @@ export default function InventoryView() {
     a.download = `minimart-inventory-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success('Inventory catalog exported to CSV', 'Export Downloaded');
   };
 
   return (
@@ -191,8 +196,7 @@ export default function InventoryView() {
           <div>
             <p className="text-xs text-slate-400 font-medium">Retail Value</p>
             <p className="text-xl font-bold text-emerald-400 font-mono mt-0.5">
-              {settings.currencySymbol}
-              {totalRetailValue.toFixed(2)}
+              {formatPrice(totalRetailValue)}
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
@@ -320,12 +324,10 @@ export default function InventoryView() {
                       </span>
                     </td>
                     <td className="p-3 text-right font-mono text-slate-400">
-                      {settings.currencySymbol}
-                      {p.costPrice.toFixed(2)}
+                      {formatPrice(p.costPrice)}
                     </td>
                     <td className="p-3 text-right font-mono font-bold text-slate-100">
-                      {settings.currencySymbol}
-                      {p.price.toFixed(2)}
+                      {formatPrice(p.price)}
                     </td>
                     <td className="p-3 text-right font-mono text-emerald-400 font-semibold">
                       {margin}%
@@ -373,6 +375,7 @@ export default function InventoryView() {
                           onClick={() => {
                             if (window.confirm(`Delete "${p.name}" from inventory?`)) {
                               deleteProduct(p.id);
+                              toast.info(`"${p.name}" deleted from catalog`, 'Product Removed');
                             }
                           }}
                           className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition"
@@ -607,6 +610,7 @@ export default function InventoryView() {
               <button
                 onClick={() => {
                   restockProduct(quickRestockId, restockAmount);
+                  toast.success(`Restocked +${restockAmount} units`, 'Stock Updated');
                   setQuickRestockId(null);
                 }}
                 className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg"

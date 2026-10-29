@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { refundOrderInLocalDb } from '@/lib/localDb';
 
 export async function POST(
   request: Request,
@@ -13,81 +15,169 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
   const refundReason = body.reason || 'Customer refund / return';
 
-  const supabase = getSupabaseAdmin();
+  // 1. Prisma ORM Handler
+  if (isPrismaConfigured()) {
+    try {
+      // Find by ID or Receipt Number for maximum flexibility
+      const order = await prisma.order.findFirst({
+        where: {
+          OR: [{ id: id }, { receiptNumber: id }],
+        },
+        include: { items: true },
+      });
 
-  if (supabase && isSupabaseConfigured()) {
-    // 1. Fetch order and its items
-    const { data: order, error: fetchErr } = await supabase
-      .from('orders')
-      .select('*, order_items (*)')
-      .eq('id', id)
-      .single();
+      if (order) {
+        if (order.status === 'REFUNDED') {
+          return NextResponse.json(
+            { success: false, error: 'Order is already marked as refunded in database.' },
+            { status: 400 }
+          );
+        }
 
-    if (fetchErr || !order) {
-      return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 });
-    }
+        // Execute atomic refund transaction
+        await prisma.$transaction(async (tx) => {
+          // Update order status
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              status: 'REFUNDED',
+              refundReason,
+            },
+          });
 
-    if (order.status === 'REFUNDED') {
-      return NextResponse.json(
-        { success: false, error: 'Order is already marked as refunded' },
-        { status: 400 }
-      );
-    }
-
-    // 2. Mark refunded
-    const { error: updateErr } = await supabase
-      .from('orders')
-      .update({
-        status: 'REFUNDED',
-        refund_reason: refundReason,
-      })
-      .eq('id', id);
-
-    if (updateErr) {
-      return NextResponse.json({ success: false, error: updateErr.message }, { status: 400 });
-    }
-
-    // 3. Restore product stock in PostgreSQL
-    const items = order.order_items || [];
-    for (const item of items) {
-      if (item.product_id) {
-        try {
-          const { data: prod } = await supabase
-            .from('products')
-            .select('stock')
-            .eq('id', item.product_id)
-            .single();
-
-          if (prod) {
-            await supabase
-              .from('products')
-              .update({
-                stock: (prod.stock || 0) + item.quantity,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', item.product_id);
+          // Restore stock in products table
+          for (const item of order.items) {
+            if (item.productId) {
+              try {
+                await tx.product.update({
+                  where: { id: item.productId },
+                  data: {
+                    stock: { increment: item.quantity },
+                  },
+                });
+              } catch (err) {
+                console.warn(`Could not restore stock for product ${item.productId}:`, err);
+              }
+            }
           }
-        } catch (err) {
-          console.error('Failed to restore item stock:', err);
+        });
+
+        // Also reflect in local DB
+        refundOrderInLocalDb(order.id, refundReason);
+
+        return NextResponse.json({
+          success: true,
+          source: 'prisma_postgresql',
+          message: 'Order refunded and inventory stock restored in PostgreSQL via Prisma',
+          data: {
+            id: order.id,
+            receiptNumber: order.receiptNumber,
+            status: 'REFUNDED',
+            refundReason,
+          },
+        });
+      }
+    } catch (err: unknown) {
+      console.error('Prisma refund error:', err);
+    }
+  }
+
+  // 2. Supabase Client Handler (when Prisma direct connection isn't configured)
+  const supabase = getSupabaseAdmin();
+  if (supabase && isSupabaseConfigured()) {
+    try {
+      // Find order by ID or Receipt Number
+      let { data: order } = await supabase
+        .from('orders')
+        .select('*, order_items (*)')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (!order) {
+        const { data: byReceipt } = await supabase
+          .from('orders')
+          .select('*, order_items (*)')
+          .eq('receipt_number', id)
+          .maybeSingle();
+        order = byReceipt;
+      }
+
+      if (order) {
+        if (order.status === 'REFUNDED') {
+          return NextResponse.json(
+            { success: false, error: 'Order is already marked as refunded in Supabase.' },
+            { status: 400 }
+          );
+        }
+
+        // Update status in orders table
+        const { error: updateErr } = await supabase
+          .from('orders')
+          .update({
+            status: 'REFUNDED',
+            refund_reason: refundReason,
+          })
+          .eq('id', order.id);
+
+        if (!updateErr) {
+          // Restore product stock in products table
+          const items = (order.order_items as Array<Record<string, unknown>>) || [];
+          for (const item of items) {
+            if (item.product_id) {
+              try {
+                const { data: prod } = await supabase
+                  .from('products')
+                  .select('stock')
+                  .eq('id', String(item.product_id))
+                  .single();
+
+                if (prod) {
+                  const restoredStock = (prod.stock || 0) + Number(item.quantity || 0);
+                  await supabase
+                    .from('products')
+                    .update({ stock: restoredStock, updated_at: new Date().toISOString() })
+                    .eq('id', String(item.product_id));
+                }
+              } catch (err) {
+                console.error('Failed to restore item stock in Supabase:', err);
+              }
+            }
+          }
+
+          // Also reflect in local DB
+          refundOrderInLocalDb(order.id, refundReason);
+
+          return NextResponse.json({
+            success: true,
+            source: 'supabase_postgres',
+            message: 'Order refunded and inventory stock restored in Supabase PostgreSQL',
+            data: {
+              id: order.id,
+              receiptNumber: order.receipt_number,
+              status: 'REFUNDED',
+              refundReason,
+            },
+          });
         }
       }
+    } catch (err: unknown) {
+      console.error('Supabase refund error:', err);
     }
+  }
 
+  // 3. Fallback to Local Persistent File Database
+  const refunded = refundOrderInLocalDb(id, refundReason);
+  if (refunded) {
     return NextResponse.json({
       success: true,
-      message: 'Order refunded and inventory stock restored successfully',
-      data: {
-        id,
-        status: 'REFUNDED',
-        refundReason,
-      },
+      source: 'local_file_database',
+      message: 'Order refunded and inventory stock restored in local database file (data/minimart_db.json)',
+      data: refunded,
     });
   }
 
-  return NextResponse.json({
-    success: true,
-    message: 'Refund recorded locally',
-    data: { id, status: 'REFUNDED', refundReason },
-  });
+  return NextResponse.json(
+    { success: false, error: `Order '${id}' not found in database.` },
+    { status: 404 }
+  );
 }
-

@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { Product, ProductCategory } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
+import { toast } from '@/context/ToastContext';
+import OpenItemModal from '@/components/OpenItemModal';
 import {
   Search,
   Barcode,
@@ -102,6 +104,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
     cartTax,
     cartTotal,
     cartItemCount,
+    formatPrice,
     settings,
     setIsPaymentModalOpen,
     holdCurrentCart,
@@ -113,6 +116,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
   const [searchQuery, setSearchQuery] = useState('');
   const [discountingItemId, setDiscountingItemId] = useState<string | null>(null);
   const [discountValue, setDiscountValue] = useState<string>('10');
+  const [isOpenItemModalOpen, setIsOpenItemModalOpen] = useState(false);
 
   // Fast Barcode Scanner input ref
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -131,7 +135,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
     if (success) {
       setBarcodeInput('');
     } else {
-      alert(`No product found with barcode or SKU: "${barcodeInput}"`);
+      toast.warning(`No product found with barcode or SKU: "${barcodeInput}"`, 'Item Not Found');
     }
     barcodeInputRef.current?.focus();
   };
@@ -156,39 +160,16 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
 
   const handleHoldOrder = () => {
     if (cart.length === 0) return;
-    const note = window.prompt(
-      'Enter customer name or note for held order:',
-      `Customer @ ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    );
-    if (note !== null) {
-      holdCurrentCart(note);
-    }
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const note = `Customer @ ${timeStr}`;
+    holdCurrentCart(note);
+    toast.info(`Cart parked (${cart.length} items) under "${note}"`, 'Order Held');
   };
 
-  // Quick custom item modal (e.g., loose fruit, bakery, manual open price item)
-  const handleAddCustomItem = () => {
-    const name = window.prompt('Custom Item Name (e.g., Morning Coffee, Fresh Muffin):', 'Custom Minimart Item');
-    if (!name) return;
-    const priceStr = window.prompt('Enter Item Price ($):', '2.50');
-    const price = parseFloat(priceStr || '0');
-    if (isNaN(price) || price <= 0) return;
-
-    const customProduct: Product = {
-      id: 'custom-' + Date.now(),
-      barcode: 'CUSTOM-' + Math.floor(1000 + Math.random() * 9000),
-      name,
-      category: 'Essentials',
-      price: Number(price.toFixed(2)),
-      costPrice: Number((price * 0.5).toFixed(2)),
-      stock: 999,
-      reorderLevel: 10,
-      unit: 'pc',
-      color: 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
-      iconName: 'Package',
-      isTaxable: true,
-    };
-
-    addToCart(customProduct, 1);
+  // Open custom price item modal
+  const handleOpenItemClick = () => {
+    soundManager.playClick();
+    setIsOpenItemModalOpen(true);
   };
 
   return (
@@ -235,8 +216,9 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
 
           {/* Custom Open-price Item Button */}
           <button
-            onClick={handleAddCustomItem}
-            className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition"
+            type="button"
+            onClick={handleOpenItemClick}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition cursor-pointer"
             title="Add custom item with open price"
           >
             <Sparkles className="w-4 h-4 text-amber-400" />
@@ -362,8 +344,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                     {/* Price & Add Indicator */}
                     <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
                       <span className="font-bold text-sm text-emerald-400 font-mono">
-                        {settings.currencySymbol}
-                        {product.price.toFixed(2)}
+                        {formatPrice(product.price)}
                       </span>
                       <div className="w-6 h-6 rounded-md bg-slate-800 group-hover:bg-emerald-600 flex items-center justify-center text-slate-300 group-hover:text-white transition">
                         <Plus className="w-3.5 h-3.5" />
@@ -455,8 +436,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
                         <span>
-                          {settings.currencySymbol}
-                          {unitPrice.toFixed(2)}
+                          {formatPrice(unitPrice)}
                         </span>
                         {item.discountPercent > 0 && (
                           <span className="text-amber-400 font-semibold">
@@ -472,8 +452,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                     {/* Line total */}
                     <div className="text-right">
                       <span className="font-bold text-sm text-emerald-400 font-mono">
-                        {settings.currencySymbol}
-                        {lineTotal.toFixed(2)}
+                        {formatPrice(lineTotal)}
                       </span>
                     </div>
                   </div>
@@ -576,8 +555,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
             <div className="flex justify-between text-slate-400">
               <span>Subtotal</span>
               <span className="font-mono text-slate-200">
-                {settings.currencySymbol}
-                {cartSubtotal.toFixed(2)}
+                {formatPrice(cartSubtotal)}
               </span>
             </div>
 
@@ -586,8 +564,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                 <span>Sales Tax ({settings.taxRatePercent}%)</span>
               </span>
               <span className="font-mono text-slate-200">
-                {settings.currencySymbol}
-                {cartTax.toFixed(2)}
+                {formatPrice(cartTax)}
               </span>
             </div>
 
@@ -602,8 +579,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
               </div>
               <div className="text-right">
                 <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
-                  {settings.currencySymbol}
-                  {cartTotal.toFixed(2)}
+                  {formatPrice(cartTotal)}
                 </span>
               </div>
             </div>
@@ -624,10 +600,16 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
             }`}
           >
             <CreditCard className="w-5 h-5 text-slate-950" />
-            <span>PAY NOW &bull; {settings.currencySymbol}{cartTotal.toFixed(2)}</span>
+            <span>PAY NOW &bull; {formatPrice(cartTotal)}</span>
           </button>
         </div>
       </div>
+
+      {/* Dedicated Open / Custom Item Modal */}
+      <OpenItemModal
+        isOpen={isOpenItemModalOpen}
+        onClose={() => setIsOpenItemModalOpen(false)}
+      />
     </div>
   );
 }

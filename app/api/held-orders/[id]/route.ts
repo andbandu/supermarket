@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
-import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { prisma, isPrismaConfigured } from '@/lib/prisma';
 
 export async function DELETE(
   request: Request,
@@ -10,15 +10,17 @@ export async function DELETE(
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
   const { id } = await params;
-  const supabase = getSupabaseAdmin();
 
-  if (supabase && isSupabaseConfigured()) {
-    const { error } = await supabase.from('held_orders').delete().eq('id', id);
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  if (isPrismaConfigured()) {
+    try {
+      await prisma.heldOrder.delete({
+        where: { id },
+      });
+      return NextResponse.json({ success: true, source: 'prisma_postgresql', message: `Held order ${id} deleted` });
+    } catch {
+      // ignore if already deleted
     }
   }
 
-  return NextResponse.json({ success: true, message: `Held order ${id} deleted` });
+  return NextResponse.json({ success: true, message: `Held order ${id} deleted locally` });
 }
-
