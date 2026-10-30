@@ -3,13 +3,12 @@ import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
 import { prisma, isPrismaConfigured } from '@/lib/prisma';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
 import { Order, OrderItem } from '@/types/pos';
-import { readLocalDb, saveOrderToLocalDb } from '@/lib/localDb';
 
 export async function GET(request: Request) {
   const auth = validateApiAuth(request);
   if (!auth.authorized) return unauthorizedResponse(auth.error);
 
-  // 1. Try Prisma ORM
+  // 1. Prisma ORM (Primary PostgreSQL connection)
   if (isPrismaConfigured()) {
     try {
       const orders = await prisma.order.findMany({
@@ -21,62 +20,60 @@ export async function GET(request: Request) {
         },
       });
 
-      if (orders && orders.length > 0) {
-        const formatted: Order[] = orders.map((o) => {
-          const items: OrderItem[] = o.items.map((item) => ({
-            productId: item.productId || '',
-            productName: item.productName,
-            barcode: item.barcode,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discountPercent: item.discountPercent,
-            totalPrice: item.totalPrice,
-          }));
+      const formatted: Order[] = orders.map((o) => {
+        const items: OrderItem[] = o.items.map((item) => ({
+          productId: item.productId || '',
+          productName: item.productName,
+          barcode: item.barcode,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountPercent: item.discountPercent,
+          totalPrice: item.totalPrice,
+        }));
 
-          return {
-            id: o.id,
-            receiptNumber: o.receiptNumber,
-            timestamp: o.timestamp.toISOString(),
-            items,
-            subtotal: o.subtotal,
-            discountAmount: o.discountAmount,
-            taxAmount: o.taxAmount,
-            total: o.total,
-            paymentMethod: o.paymentMethod as Order['paymentMethod'],
-            amountTendered: o.amountTendered,
-            changeGiven: o.changeGiven,
-            cashierName: o.cashierName,
-            status: o.status as Order['status'],
-            refundReason: o.refundReason ?? undefined,
-            notes: o.notes ?? undefined,
-          };
-        });
+        return {
+          id: o.id,
+          receiptNumber: o.receiptNumber,
+          timestamp: o.timestamp.toISOString(),
+          items,
+          subtotal: o.subtotal,
+          discountAmount: o.discountAmount,
+          taxAmount: o.taxAmount,
+          total: o.total,
+          paymentMethod: o.paymentMethod as Order['paymentMethod'],
+          amountTendered: o.amountTendered,
+          changeGiven: o.changeGiven,
+          cashierName: o.cashierName,
+          status: o.status as Order['status'],
+          refundReason: o.refundReason ?? undefined,
+          notes: o.notes ?? undefined,
+        };
+      });
 
-        return NextResponse.json({
-          success: true,
-          source: 'prisma_postgresql',
-          data: formatted,
-        });
-      }
+      return NextResponse.json({
+        success: true,
+        source: 'prisma_postgresql',
+        data: formatted,
+      });
     } catch (err) {
       console.error('Prisma orders query error:', err);
     }
   }
 
-  // 2. Try Supabase Client
+  // 2. Direct Supabase Client
   const supabase = getSupabaseAdmin();
   if (supabase && isSupabaseConfigured()) {
     try {
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('*, order_items (*)')
+        .select('*, order_items(*)')
         .order('timestamp', { ascending: false });
 
-      if (!ordersError && ordersData && ordersData.length > 0) {
-        const formatted: Order[] = ordersData.map((o: Record<string, unknown>) => {
-          const rawItems = (o.order_items as Array<Record<string, unknown>>) || [];
-          const items: OrderItem[] = rawItems.map((item) => ({
-            productId: String(item.product_id),
+      if (!ordersError && ordersData) {
+        const formatted: Order[] = ordersData.map((o: any) => {
+          const rawItems = o.order_items || [];
+          const items: OrderItem[] = rawItems.map((item: any) => ({
+            productId: item.product_id ? String(item.product_id) : '',
             productName: String(item.product_name),
             barcode: String(item.barcode),
             quantity: Number(item.quantity),
@@ -115,12 +112,10 @@ export async function GET(request: Request) {
     }
   }
 
-  // 3. Fallback to Persistent Local Database File
-  const localDb = readLocalDb();
   return NextResponse.json({
     success: true,
-    source: 'local_file_database',
-    data: localDb.orders,
+    source: 'empty_fallback',
+    data: [],
   });
 }
 
@@ -167,11 +162,11 @@ export async function POST(request: Request) {
       notes,
     };
 
-    // 1. Process via Prisma ORM
+    // 1. Process via Prisma ORM (Atomic Transaction: create order + decrement stock)
     if (isPrismaConfigured()) {
       try {
         const result = await prisma.$transaction(async (tx) => {
-          // Verify or auto-create product records so foreign keys never fail
+          // Check products to ensure valid foreign keys
           const productMap = new Map<string, boolean>();
 
           for (const item of items) {
@@ -179,37 +174,22 @@ export async function POST(request: Request) {
               const existing = await tx.product.findUnique({
                 where: { id: item.productId },
               });
-
               if (existing) {
                 productMap.set(item.productId, true);
-                // Safely decrement stock
+                // Decrement stock in database in real-time
                 await tx.product.update({
                   where: { id: item.productId },
                   data: {
-                    stock: { decrement: item.quantity },
+                    stock: {
+                      decrement: item.quantity,
+                    },
                   },
                 });
-              } else {
-                // Auto-create product in PostgreSQL
-                await tx.product.create({
-                  data: {
-                    id: item.productId,
-                    barcode: item.barcode || item.productId,
-                    name: item.productName,
-                    category: 'General',
-                    price: item.unitPrice,
-                    costPrice: item.unitPrice * 0.5,
-                    stock: 50 - item.quantity,
-                    reorderLevel: 5,
-                    unit: 'pcs',
-                  },
-                });
-                productMap.set(item.productId, true);
               }
             }
           }
 
-          // Create the Order and OrderItems
+          // Create the Order with all OrderItems
           const createdOrder = await tx.order.create({
             data: {
               id: orderId,
@@ -245,9 +225,6 @@ export async function POST(request: Request) {
           return createdOrder;
         });
 
-        // Also update local DB as backup
-        saveOrderToLocalDb(completedOrder);
-
         return NextResponse.json({
           success: true,
           source: 'prisma_postgresql',
@@ -271,11 +248,10 @@ export async function POST(request: Request) {
         });
       } catch (prismaErr) {
         console.error('Prisma order transaction error:', prismaErr);
-        // Fall through to Supabase or local DB
       }
     }
 
-    // 2. Process via Supabase Client
+    // 2. Direct Supabase Client
     const supabase = getSupabaseAdmin();
     if (supabase && isSupabaseConfigured()) {
       try {
@@ -299,7 +275,6 @@ export async function POST(request: Request) {
 
         if (!orderError) {
           if (items.length > 0) {
-            // Check products
             const productIds = items
               .map((i) => i.productId)
               .filter((id) => id && !id.startsWith('custom-'));
@@ -324,7 +299,7 @@ export async function POST(request: Request) {
 
             await supabase.from('order_items').insert(itemRows);
 
-            // Decrement stock
+            // Decrement stock in database in real-time
             for (const item of items) {
               if (existingSet.has(item.productId)) {
                 try {
@@ -348,8 +323,6 @@ export async function POST(request: Request) {
             }
           }
 
-          saveOrderToLocalDb(completedOrder);
-
           return NextResponse.json({
             success: true,
             source: 'supabase_postgres',
@@ -362,15 +335,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Fallback to Local Persistent Database File (Guaranteed to save!)
-    const savedLocal = saveOrderToLocalDb(completedOrder);
-
-    return NextResponse.json({
-      success: true,
-      source: 'local_file_database',
-      message: 'Order persisted successfully in local database file (data/minimart_db.json)',
-      data: savedLocal,
-    });
+    return NextResponse.json(
+      { success: false, error: 'Database connection failed. Unable to record order.' },
+      { status: 500 }
+    );
   } catch (err: unknown) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : 'Invalid order payload' },

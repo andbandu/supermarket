@@ -18,11 +18,30 @@ export interface Product {
   stock: number;
   reorderLevel: number;
   unit: string;
+  brand?: string;
   image?: string;
+  images?: string[]; // Up to 4 WebP product images for storefront & mobile app
   iconName?: string;
   color?: string;
   isTaxable: boolean;
 }
+
+export const PRODUCT_UNITS = [
+  { value: 'pcs', label: 'Pieces (pcs)' },
+  { value: 'pack', label: 'Pack / Packet' },
+  { value: 'bottle', label: 'Bottle' },
+  { value: 'can', label: 'Can' },
+  { value: 'kg', label: 'Kilogram (kg)' },
+  { value: 'g', label: 'Gram (g)' },
+  { value: 'litre', label: 'Litre (L)' },
+  { value: 'ml', label: 'Millilitre (ml)' },
+  { value: 'box', label: 'Box / Carton' },
+  { value: 'bundle', label: 'Bundle' },
+  { value: 'dozen', label: 'Dozen' },
+  { value: 'tin', label: 'Tin' },
+  { value: 'sachet', label: 'Sachet' },
+  { value: 'roll', label: 'Roll' },
+] as const;
 
 export interface CartItem {
   product: Product;

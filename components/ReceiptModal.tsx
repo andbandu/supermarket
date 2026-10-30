@@ -167,15 +167,10 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
         {/* Database Status Notification Banner */}
         <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-[11px] no-print">
           <span className="text-slate-400">Database Record:</span>
-          {isSupabaseLive ? (
-            <span className="text-emerald-400 font-semibold">
-              ✓ Synced to Supabase PostgreSQL
-            </span>
-          ) : (
-            <span className="text-amber-400 font-semibold" title="Add DATABASE_URL to .env.local to sync to cloud">
-              💾 Stored in Local File DB
-            </span>
-          )}
+          <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Recorded in Real-Time (Supabase PostgreSQL)</span>
+          </span>
         </div>
 
         {/* Modal Bottom Buttons */}

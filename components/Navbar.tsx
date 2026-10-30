@@ -37,6 +37,7 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
     products,
     isSupabaseLive,
     isSyncing,
+    isLoading,
     refreshFromApi,
   } = usePOS();
 
@@ -78,42 +79,52 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
       <div className="max-w-[1920px] mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
         {/* Brand & Store Name */}
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white shrink-0">
             <Store className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-wide text-white font-mono">
-                {settings.storeName}
-              </span>
-
-              {/* Prisma ORM, Supabase & Mobile API Status Pill */}
-              <button
-                onClick={() => setShowApiModal(true)}
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition ${
-                  isSupabaseLive
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
-                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25'
-                }`}
-                title="Click to view Prisma ORM, Supabase PostgreSQL & Mobile API status"
-              >
-                <Database className="w-3 h-3" />
-                <span>{isSupabaseLive ? 'Prisma & Postgres Live' : 'Prisma ORM'}</span>
-                {isSyncing ? (
-                  <RefreshCw className="w-2.5 h-2.5 animate-spin ml-0.5 text-cyan-400" />
-                ) : (
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isSupabaseLive ? 'bg-emerald-400' : 'bg-cyan-400'
-                    }`}
-                  />
-                )}
-              </button>
+          {isLoading || !settings.storeName ? (
+            <div className="space-y-1.5 animate-pulse py-0.5">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-36 bg-slate-800 rounded"></div>
+                <div className="h-4 w-28 bg-slate-800/80 rounded-full"></div>
+              </div>
+              <div className="h-3 w-44 bg-slate-800/60 rounded"></div>
             </div>
-            <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
-              {settings.tagline}
-            </p>
-          </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base tracking-wide text-white font-mono">
+                  {settings.storeName}
+                </span>
+
+                {/* Prisma ORM, Supabase & Mobile API Status Pill */}
+                <button
+                  onClick={() => setShowApiModal(true)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                    isSupabaseLive
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
+                      : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25'
+                  }`}
+                  title="Click to view Prisma ORM, Supabase PostgreSQL & Mobile API status"
+                >
+                  <Database className="w-3 h-3" />
+                  <span>{isSupabaseLive ? 'Prisma & Postgres Live' : 'Prisma ORM'}</span>
+                  {isSyncing ? (
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin ml-0.5 text-cyan-400" />
+                  ) : (
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isSupabaseLive ? 'bg-emerald-400' : 'bg-cyan-400'
+                      }`}
+                    />
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
+                {settings.tagline}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}

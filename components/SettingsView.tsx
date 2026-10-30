@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { soundManager } from '@/lib/sound';
 import { toast } from '@/context/ToastContext';
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function SettingsView() {
-  const { settings, updateSettings, resetToSampleData } = usePOS();
+  const { settings, updateSettings, resetToSampleData, isLoading } = usePOS();
 
   const [formData, setFormData] = useState({
     storeName: settings.storeName,
@@ -33,6 +33,23 @@ export default function SettingsView() {
   });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Synchronize form when live settings arrive from API
+  useEffect(() => {
+    if (settings.storeName) {
+      setFormData({
+        storeName: settings.storeName,
+        tagline: settings.tagline || '',
+        storeAddress: settings.storeAddress || '',
+        storePhone: settings.storePhone || '',
+        currencySymbol: settings.currencySymbol || 'LKR',
+        taxRatePercent: (settings.taxRatePercent ?? 0).toString(),
+        activeCashier: settings.activeCashier || '',
+        receiptFooter: settings.receiptFooter || '',
+        soundEnabled: settings.soundEnabled,
+      });
+    }
+  }, [settings]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +97,49 @@ export default function SettingsView() {
         </div>
 
         {/* Configuration Form */}
-        <form onSubmit={handleSave} className="space-y-5">
+        {isLoading ? (
+          <div className="space-y-5 animate-pulse">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="h-5 w-32 bg-slate-800 rounded mb-4" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="h-3 w-20 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-20 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-20 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-20 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="h-5 w-40 bg-slate-800 rounded mb-4" />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <div className="h-3 w-24 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-24 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-24 bg-slate-800/80 rounded" />
+                  <div className="h-10 bg-slate-950 border border-slate-800 rounded-xl" />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-5">
           {/* Section: Store Profile */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
             <h3 className="font-bold text-sm text-slate-200 flex items-center gap-2 border-b border-slate-800 pb-3">
@@ -243,6 +302,7 @@ export default function SettingsView() {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

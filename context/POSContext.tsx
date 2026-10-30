@@ -11,7 +11,6 @@ import {
   PaymentMethod,
   OrderItem,
 } from '@/types/pos';
-import { INITIAL_PRODUCTS, DEFAULT_SETTINGS } from '@/lib/mockData';
 import { soundManager } from '@/lib/sound';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/context/ToastContext';
@@ -39,6 +38,7 @@ interface POSContextType {
   dbSource: string;
   isSupabaseLive: boolean;
   isSyncing: boolean;
+  isLoading: boolean;
   refreshFromApi: () => Promise<void>;
 
   // Cart Actions
@@ -82,21 +82,36 @@ interface POSContextType {
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
 
+const EMPTY_SETTINGS: POSSettings = {
+  storeName: '',
+  tagline: '',
+  storeAddress: '',
+  storePhone: '',
+  taxRatePercent: 0.0,
+  currencySymbol: 'LKR',
+  receiptFooter: '',
+  soundEnabled: true,
+  activeCashier: '',
+};
+
+const EMPTY_SHIFT: CashierShift = {
+  id: '',
+  cashierName: '',
+  startedAt: new Date().toISOString(),
+  startingFloat: 0,
+  cashDrops: 0,
+  isClosed: false,
+};
+
 export function POSProvider({ children }: { children: React.ReactNode }) {
-  // Stable initial states for SSR / prerender safety
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [settings, setSettings] = useState<POSSettings>(DEFAULT_SETTINGS);
+  // Real-time online state: initialized empty with skeleton loading until live API connects
+  const [products, setProducts] = useState<Product[]>([]);
+  const [settings, setSettings] = useState<POSSettings>(EMPTY_SETTINGS);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [shift, setShift] = useState<CashierShift>({
-    id: 'shift-current',
-    cashierName: DEFAULT_SETTINGS.activeCashier,
-    startedAt: '2026-10-29T08:00:00.000Z',
-    startingFloat: 200.0,
-    cashDrops: 0,
-    isClosed: false,
-  });
+  const [shift, setShift] = useState<CashierShift>(EMPTY_SHIFT);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'history' | 'shift' | 'settings'>('pos');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -106,15 +121,15 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Sync state
-  const [dbSource, setDbSource] = useState<string>('Checking...');
+  const [dbSource, setDbSource] = useState<string>('Connecting...');
   const [isSupabaseLive, setIsSupabaseLive] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Load from Supabase via Next.js API
+  // Live Database synchronization (Just In Time)
   const refreshFromApi = useCallback(async () => {
     setIsSyncing(true);
     try {
-      // 1. Health check
+      // 1. Health check & live database indicator
       const health = await apiClient.checkHealth();
       if (health && health.database) {
         const dbStatus =
@@ -132,120 +147,60 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         setIsSupabaseLive(isLive);
       }
 
-      // 2. Products from API
+      // 2. Fetch live products from PostgreSQL
       const prodRes = await apiClient.getProducts();
-      if (prodRes && prodRes.success && prodRes.data && prodRes.data.length > 0) {
+      if (prodRes && prodRes.success && Array.isArray(prodRes.data)) {
         setProducts(prodRes.data);
       }
 
-      // 3. Orders from API
+      // 3. Fetch live orders from PostgreSQL (reflects live database state immediately)
       const ordersRes = await apiClient.getOrders();
-      if (ordersRes && ordersRes.success && ordersRes.data && ordersRes.data.length > 0) {
+      if (ordersRes && ordersRes.success && Array.isArray(ordersRes.data)) {
         setOrders(ordersRes.data);
       }
 
-      // 4. Settings from API
+      // 4. Fetch live held orders from PostgreSQL
+      const heldRes = await apiClient.getHeldOrders();
+      if (heldRes && heldRes.success && Array.isArray(heldRes.data)) {
+        setHeldOrders(heldRes.data);
+      }
+
+      // 5. Fetch live settings from PostgreSQL
       const settingsRes = await apiClient.getSettings();
       if (settingsRes && settingsRes.success && settingsRes.data) {
         setSettings((prev) => ({ ...prev, ...settingsRes.data }));
       }
+
+      // 6. Fetch live shift from PostgreSQL
+      const shiftRes = await apiClient.getShift();
+      if (shiftRes && shiftRes.success && shiftRes.data) {
+        setShift(shiftRes.data);
+      }
     } catch (err) {
-      console.warn('API sync warning (operating in local offline mode):', err);
+      console.warn('Real-time database sync warning:', err);
     } finally {
       setIsSyncing(false);
+      setIsLoading(false);
+      setIsHydrated(true);
     }
   }, []);
 
-  // Load persisted state on client mount, then sync with API
+  // On client mount: purge old localStorage and sync real-time state from database
   useEffect(() => {
     try {
-      const savedProducts = localStorage.getItem('minimart_pos_products');
-      if (savedProducts) {
-        const parsedProds = JSON.parse(savedProducts);
-        // Automatically migrate if old USD prices were cached
-        if (Array.isArray(parsedProds) && parsedProds.length > 0 && parsedProds[0].price < 50) {
-          setProducts(INITIAL_PRODUCTS);
-          localStorage.setItem('minimart_pos_products', JSON.stringify(INITIAL_PRODUCTS));
-        } else {
-          setProducts(parsedProds);
-        }
-      }
-
-      const savedSettings = localStorage.getItem('minimart_pos_settings');
-      if (savedSettings) {
-        const parsedSettings = JSON.parse(savedSettings);
-        if (!parsedSettings.currencySymbol || !['LKR', 'Rs.', 'රු.'].includes(parsedSettings.currencySymbol)) {
-          parsedSettings.currencySymbol = 'LKR';
-        }
-        setSettings((prev) => ({ ...prev, ...parsedSettings }));
-      }
-
-      const savedCart = localStorage.getItem('minimart_pos_cart');
-      if (savedCart) setCart(JSON.parse(savedCart));
-
-      const savedHeld = localStorage.getItem('minimart_pos_held_orders');
-      if (savedHeld) setHeldOrders(JSON.parse(savedHeld));
-
-      const savedOrders = localStorage.getItem('minimart_pos_orders');
-      if (savedOrders) setOrders(JSON.parse(savedOrders));
-
-      const savedShift = localStorage.getItem('minimart_pos_shift');
-      if (savedShift) {
-        setShift(JSON.parse(savedShift));
-      } else {
-        setShift({
-          id: 'shift-' + Date.now(),
-          cashierName: DEFAULT_SETTINGS.activeCashier,
-          startedAt: new Date().toISOString(),
-          startingFloat: 5000.0,
-          cashDrops: 0,
-          isClosed: false,
-        });
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
       }
     } catch {
-      // fallback
+      // ignore
     }
-    setIsHydrated(true);
-
-    // Initial API Sync
     refreshFromApi();
   }, [refreshFromApi]);
 
-  // Sync sound manager enabled flag with settings
+  // Sync sound manager enabled flag with live settings
   useEffect(() => {
     soundManager.enabled = settings.soundEnabled;
   }, [settings.soundEnabled]);
-
-  // Persist back to localStorage
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('minimart_pos_products', JSON.stringify(products));
-  }, [products, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('minimart_pos_settings', JSON.stringify(settings));
-  }, [settings, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('minimart_pos_cart', JSON.stringify(cart));
-  }, [cart, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('minimart_pos_held_orders', JSON.stringify(heldOrders));
-  }, [heldOrders, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('minimart_pos_orders', JSON.stringify(orders));
-  }, [orders, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    localStorage.setItem('minimart_pos_shift', JSON.stringify(shift));
-  }, [shift, isHydrated]);
 
   // Calculations
   const cartSubtotal = useMemo(() => {
@@ -618,58 +573,78 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     [orders, refreshFromApi]
   );
 
-  const addProduct = useCallback((newProd: Omit<Product, 'id'>) => {
-    const id = 'prod-' + Date.now().toString().slice(-6);
-    const created: Product = {
-      ...newProd,
-      id,
-    };
-    setProducts((prev) => [created, ...prev]);
-    soundManager.playSuccess();
+  const addProduct = useCallback(
+    async (newProd: Omit<Product, 'id'>) => {
+      soundManager.playSuccess();
+      try {
+        const res = await apiClient.createProduct(newProd);
+        if (res && res.success && res.data) {
+          const createdProduct = res.data;
+          setProducts((prev) => [createdProduct, ...prev.filter((p) => p.id !== createdProduct.id)]);
+        } else if (res && !res.success) {
+          toast.error(res.error || 'Failed to save product to database', 'Database Error');
+        }
+        await refreshFromApi();
+      } catch (err: unknown) {
+        console.error('Failed to add product to database:', err);
+        toast.error('Network error while saving product', 'Connection Error');
+      }
+    },
+    [refreshFromApi]
+  );
 
-    // Sync to API
-    apiClient.createProduct(created).catch((err) => {
-      console.error('Failed to add product to API:', err);
-    });
-  }, []);
-
-  const updateProduct = useCallback((updated: Product) => {
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    soundManager.playClick();
-
-    // Sync to API
-    apiClient.updateProduct(updated.id, updated).catch((err) => {
-      console.error('Failed to update product on API:', err);
-    });
-  }, []);
+  const updateProduct = useCallback(
+    async (updated: Product) => {
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      soundManager.playClick();
+      try {
+        const res = await apiClient.updateProduct(updated.id, updated);
+        if (res && !res.success) {
+          toast.error(res.error || 'Failed to update product in database', 'Database Error');
+        }
+        await refreshFromApi();
+      } catch (err: unknown) {
+        console.error('Failed to update product in database:', err);
+        toast.error('Network error while updating product', 'Connection Error');
+      }
+    },
+    [refreshFromApi]
+  );
 
   const restockProduct = useCallback((productId: string, amount: number) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, stock: p.stock + amount } : p))
-    );
     soundManager.playBeep();
-
-    // Sync to API
-    apiClient.restockProduct(productId, amount).catch((err) => {
-      console.error('Failed to restock on API:', err);
-    });
-  }, []);
+    apiClient
+      .restockProduct(productId, amount)
+      .then(() => refreshFromApi())
+      .catch((err) => {
+        console.error('Failed to restock in database:', err);
+      });
+  }, [refreshFromApi]);
 
   const deleteProduct = useCallback((productId: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== productId));
     soundManager.playClick();
 
-    // Sync to API
-    apiClient.deleteProduct(productId).catch((err) => {
-      console.error('Failed to delete on API:', err);
-    });
-  }, []);
+    apiClient
+      .deleteProduct(productId)
+      .then(() => refreshFromApi())
+      .catch((err) => {
+        console.error('Failed to delete product in database:', err);
+      });
+  }, [refreshFromApi]);
 
   const updateSettings = useCallback((newSettings: Partial<POSSettings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
-    apiClient.updateSettings(newSettings).catch((err) => {
-      console.error('Failed to update settings on API:', err);
-    });
+    apiClient
+      .updateSettings(newSettings)
+      .then((res) => {
+        if (res && res.success && res.data) {
+          setSettings(res.data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to update settings in database:', err);
+      });
   }, []);
 
   const performCashDrop = useCallback((amount: number, reason: string) => {
@@ -718,15 +693,12 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetToSampleData = useCallback(() => {
-    if (window.confirm('Reset all catalog and settings to initial Minimart default data?')) {
-      setProducts(INITIAL_PRODUCTS);
-      setSettings(DEFAULT_SETTINGS);
+    if (window.confirm('Reset current cart and refresh all data directly from the live database?')) {
       setCart([]);
-      setHeldOrders([]);
-      localStorage.clear();
+      refreshFromApi();
       soundManager.playSuccess();
     }
-  }, []);
+  }, [refreshFromApi]);
 
   return (
     <POSContext.Provider
@@ -750,6 +722,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         dbSource,
         isSupabaseLive,
         isSyncing,
+        isLoading,
         refreshFromApi,
         addToCart,
         addByBarcode,

@@ -1,6 +1,46 @@
 {
   "products": [
     {
+      "id": "prod-888449",
+      "barcode": "479693162569",
+      "name": "Ratthi Full Cream Milk Powder - 400.00 g",
+      "category": "Essentials",
+      "price": 1300,
+      "costPrice": 1180,
+      "stock": 24,
+      "reorderLevel": 6,
+      "unit": "pack",
+      "brand": "Fonterra",
+      "image": "https://ydzakxxrtqrhtlkpsuoy.supabase.co/storage/v1/object/public/products/catalog/479693162569_slot1_1793321824661.webp",
+      "images": [
+        "https://ydzakxxrtqrhtlkpsuoy.supabase.co/storage/v1/object/public/products/catalog/479693162569_slot1_1793321824661.webp",
+        "https://ydzakxxrtqrhtlkpsuoy.supabase.co/storage/v1/object/public/products/catalog/479693162569_slot2_1793321833613.webp"
+      ],
+      "color": "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+      "iconName": "Package",
+      "isTaxable": true
+    },
+    {
+      "id": "prod-396697",
+      "barcode": "479934968094",
+      "name": "Ratthi Full Cream Milk Powder - 400.00 g",
+      "category": "Essentials",
+      "price": 1300,
+      "costPrice": 1180,
+      "stock": 24,
+      "reorderLevel": 6,
+      "unit": "pack",
+      "brand": "Fonterra",
+      "image": "https://ydzakxxrtqrhtlkpsuoy.supabase.co/storage/v1/object/public/products/catalog/479934968094_slot1_1793320703616.webp",
+      "images": [
+        "https://ydzakxxrtqrhtlkpsuoy.supabase.co/storage/v1/object/public/products/catalog/479934968094_slot1_1793320703616.webp",
+        "https://ydzakxxrtqrhtlkpsuoy.supabase.co/storage/v1/object/public/products/catalog/479934968094_slot2_1793320231749.webp"
+      ],
+      "color": "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+      "iconName": "Package",
+      "isTaxable": true
+    },
+    {
       "id": "prod-001",
       "barcode": "479101100001",
       "name": "Elephant House Cream Soda 400ml (PET)",
@@ -516,7 +556,7 @@
     "isClosed": false
   },
   "settings": {
-    "storeName": "LANKA EXPRESS MINIMART",
+    "storeName": "zuecart.lk",
     "tagline": "Your Friendly Neighborhood Supermarket",
     "storeAddress": "No. 142 Galle Road, Colombo 03, Sri Lanka",
     "storePhone": "+94 11 258 9641",

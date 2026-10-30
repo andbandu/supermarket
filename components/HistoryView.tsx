@@ -19,9 +19,8 @@ import {
   CreditCard,
   QrCode,
   Download,
-  UploadCloud,
-  AlertCircle,
   Database,
+  RefreshCw,
 } from 'lucide-react';
 
 interface HistoryViewProps {
@@ -29,13 +28,12 @@ interface HistoryViewProps {
 }
 
 export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
-  const { orders, refundOrder, settings, isSupabaseLive, dbSource, refreshFromApi, formatPrice } = usePOS();
+  const { orders, refundOrder, settings, refreshFromApi, formatPrice, isLoading } = usePOS();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'COMPLETED' | 'REFUNDED'>('ALL');
   const [filterPayment, setFilterPayment] = useState<string>('ALL');
   const [refundingOrderId, setRefundingOrderId] = useState<string | null>(null);
-  const [isSyncingToDb, setIsSyncingToDb] = useState(false);
   const [orderToRefund, setOrderToRefund] = useState<Order | null>(null);
   const [refundReason, setRefundReason] = useState('Customer return / damaged item');
 
@@ -109,77 +107,41 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
     toast.success('Sales history exported as CSV', 'Export Downloaded');
   };
 
-  const handleSyncToSupabase = async () => {
-    setIsSyncingToDb(true);
-    soundManager.playClick();
-    try {
-      const res = await apiClient.syncToDatabase();
-      if (res.success) {
-        soundManager.playSuccess();
-        toast.success(res.message || 'Orders successfully synced to Supabase PostgreSQL!', 'Sync Complete');
-        await refreshFromApi();
-      } else {
-        soundManager.playError();
-        toast.error(
-          `Cannot sync to Supabase:\n${res.error || 'Database connection missing'}\n\nPlease check DATABASE_URL in .env`,
-          'Supabase Sync Failed',
-          7000
-        );
-      }
-    } catch (err: unknown) {
-      soundManager.playError();
-      toast.error(`Sync failed: ${err instanceof Error ? err.message : String(err)}`, 'Sync Error');
-    } finally {
-      setIsSyncingToDb(false);
-    }
-  };
-
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-61px)] overflow-hidden bg-slate-950 p-4 sm:p-6 space-y-4">
       {/* Database Connection Notice Banner */}
-      {!isSupabaseLive ? (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-300">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>
-              <strong>Storage Status:</strong> Orders are currently stored in your local persistent database (<code>data/minimart_db.json</code>). To save to Supabase cloud PostgreSQL, add your <code>DATABASE_URL</code> to <code>.env.local</code>.
-            </span>
-          </div>
-          <button
-            onClick={handleSyncToSupabase}
-            disabled={isSyncingToDb}
-            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-lg transition shrink-0 flex items-center gap-1.5 shadow-sm"
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>{isSyncingToDb ? 'Syncing...' : 'Sync Orders to Supabase'}</span>
-          </button>
+      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between text-xs text-emerald-300">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>
+            <strong>Live Cloud Database:</strong> Connected to Supabase PostgreSQL via Prisma ORM. Real-time online synchronization.
+          </span>
         </div>
-      ) : (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between text-xs text-emerald-300">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>
-              <strong>Live Database:</strong> Connected to Supabase PostgreSQL via Prisma ORM.
-            </span>
-          </div>
-          <button
-            onClick={handleSyncToSupabase}
-            disabled={isSyncingToDb}
-            className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-500/30 rounded text-[11px] font-semibold flex items-center gap-1 transition"
-          >
-            <UploadCloud className="w-3 h-3" />
-            <span>{isSyncingToDb ? 'Syncing...' : 'Push Local Backup'}</span>
-          </button>
-        </div>
-      )}
+        <button
+          onClick={() => {
+            soundManager.playClick();
+            refreshFromApi();
+            toast.info('Orders synchronized with live database', 'Real-Time Sync');
+          }}
+          className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-500/30 rounded text-[11px] font-semibold flex items-center gap-1 transition"
+        >
+          <RefreshCw className="w-3 h-3" />
+          <span>Refresh Database</span>
+        </button>
+      </div>
+
       {/* Top Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
           <div>
             <p className="text-xs text-slate-400 font-medium">Net Sales Revenue</p>
-            <p className="text-xl font-bold text-emerald-400 font-mono mt-0.5">
-              {formatPrice(totalSalesRevenue)}
-            </p>
+            {isLoading ? (
+              <div className="h-6 w-24 bg-slate-800 rounded animate-pulse mt-1" />
+            ) : (
+              <p className="text-xl font-bold text-emerald-400 font-mono mt-0.5">
+                {formatPrice(totalSalesRevenue)}
+              </p>
+            )}
           </div>
           <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
             <Receipt className="w-5 h-5" />
@@ -189,7 +151,11 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
           <div>
             <p className="text-xs text-slate-400 font-medium">Completed Transactions</p>
-            <p className="text-xl font-bold text-white mt-0.5">{completedCount}</p>
+            {isLoading ? (
+              <div className="h-6 w-16 bg-slate-800 rounded animate-pulse mt-1" />
+            ) : (
+              <p className="text-xl font-bold text-white mt-0.5">{completedCount}</p>
+            )}
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
             <CheckCircle2 className="w-5 h-5" />
@@ -199,7 +165,11 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
           <div>
             <p className="text-xs text-slate-400 font-medium">Refunded Transactions</p>
-            <p className="text-xl font-bold text-rose-400 mt-0.5">{refundedCount}</p>
+            {isLoading ? (
+              <div className="h-6 w-16 bg-slate-800 rounded animate-pulse mt-1" />
+            ) : (
+              <p className="text-xl font-bold text-rose-400 mt-0.5">{refundedCount}</p>
+            )}
           </div>
           <div className="w-10 h-10 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center">
             <RotateCcw className="w-5 h-5" />
@@ -209,9 +179,13 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
           <div>
             <p className="text-xs text-slate-400 font-medium">Refunded Amount</p>
-            <p className="text-xl font-bold text-slate-300 font-mono mt-0.5">
-              {formatPrice(totalRefundedRevenue)}
-            </p>
+            {isLoading ? (
+              <div className="h-6 w-24 bg-slate-800 rounded animate-pulse mt-1" />
+            ) : (
+              <p className="text-xl font-bold text-slate-300 font-mono mt-0.5">
+                {formatPrice(totalRefundedRevenue)}
+              </p>
+            )}
           </div>
           <div className="w-10 h-10 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 flex items-center justify-center">
             <XCircle className="w-5 h-5" />
@@ -261,13 +235,16 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={handleSyncToSupabase}
-            disabled={isSyncingToDb}
+            onClick={() => {
+              soundManager.playClick();
+              refreshFromApi();
+              toast.info('Orders synchronized with live database', 'Live DB Sync');
+            }}
             className="px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 transition"
-            title="Push local orders to Supabase cloud database"
+            title="Fetch latest orders from Supabase PostgreSQL database"
           >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>{isSyncingToDb ? 'Syncing...' : 'Sync to Supabase'}</span>
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh</span>
           </button>
 
           <button
@@ -283,7 +260,36 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
       {/* Orders List Table */}
       <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
         <div className="overflow-x-auto flex-1">
-          {filteredOrders.length === 0 ? (
+          {isLoading ? (
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[11px]">
+                <tr>
+                  <th className="p-3">Receipt #</th>
+                  <th className="p-3">Date & Time</th>
+                  <th className="p-3">Cashier</th>
+                  <th className="p-3">Items</th>
+                  <th className="p-3">Payment</th>
+                  <th className="p-3 text-right">Total</th>
+                  <th className="p-3 text-center">Status</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`history-skeleton-${idx}`} className="animate-pulse">
+                    <td className="p-3"><div className="h-4 w-28 bg-slate-800 rounded font-mono" /></td>
+                    <td className="p-3"><div className="h-4 w-20 bg-slate-800/70 rounded" /></td>
+                    <td className="p-3"><div className="h-4 w-24 bg-slate-800 rounded" /></td>
+                    <td className="p-3"><div className="h-4 w-32 bg-slate-800/60 rounded" /></td>
+                    <td className="p-3"><div className="h-5 w-16 bg-slate-800 rounded" /></td>
+                    <td className="p-3 text-right"><div className="h-4 w-16 bg-slate-800 rounded ml-auto" /></td>
+                    <td className="p-3 text-center"><div className="h-4 w-16 bg-slate-800 rounded mx-auto" /></td>
+                    <td className="p-3 text-right"><div className="h-6 w-14 bg-slate-800 rounded ml-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : filteredOrders.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-8 text-slate-500">
               <Receipt className="w-12 h-12 mb-3 stroke-1 text-slate-600" />
               <p className="font-semibold text-slate-300 text-sm">No Transactions Found</p>

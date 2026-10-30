@@ -56,7 +56,7 @@ class MinimartApiClient {
     return res.json();
   }
 
-  async createProduct(product: Omit<Product, 'id'>): Promise<{ success: boolean; data: Product }> {
+  async createProduct(product: Omit<Product, 'id'>): Promise<{ success: boolean; data?: Product; error?: string }> {
     const res = await fetch(`${this.baseUrl}/products`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -65,7 +65,7 @@ class MinimartApiClient {
     return res.json();
   }
 
-  async updateProduct(id: string, product: Partial<Product>): Promise<{ success: boolean; data: Product }> {
+  async updateProduct(id: string, product: Partial<Product>): Promise<{ success: boolean; data?: Product; error?: string }> {
     const res = await fetch(`${this.baseUrl}/products/${id}`, {
       method: 'PUT',
       headers: this.getHeaders(),
@@ -87,6 +87,27 @@ class MinimartApiClient {
     const res = await fetch(`${this.baseUrl}/products/${id}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async uploadProductImage(
+    file: Blob | File,
+    filename?: string
+  ): Promise<{ success: boolean; url?: string; storage?: string; error?: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (filename) formData.append('filename', filename);
+
+    const headers: HeadersInit = {};
+    if (this.apiKey) {
+      headers['x-api-key'] = this.apiKey;
+    }
+
+    const res = await fetch(`${this.baseUrl}/products/upload-image`, {
+      method: 'POST',
+      headers,
+      body: formData,
     });
     return res.json();
   }

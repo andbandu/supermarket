@@ -109,6 +109,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
     setIsPaymentModalOpen,
     holdCurrentCart,
     heldOrders,
+    isLoading,
   } = usePOS();
 
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -262,7 +263,36 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
 
         {/* Product Cards Grid */}
         <div className="flex-1 p-3 overflow-y-auto">
-          {filteredProducts.length === 0 ? (
+          {isLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2.5">
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div
+                  key={`pos-skeleton-${idx}`}
+                  className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 flex flex-col justify-between h-[165px] animate-pulse select-none"
+                >
+                  <div>
+                    {/* Top image box & stock badge skeleton */}
+                    <div className="flex items-start justify-between gap-1 mb-2">
+                      <div className="w-10 h-10 rounded-lg bg-slate-800 shrink-0" />
+                      <div className="w-12 h-4 rounded bg-slate-800/70" />
+                    </div>
+                    {/* Brand line */}
+                    <div className="w-16 h-2 rounded bg-slate-800/50 mb-1.5" />
+                    {/* Product name lines */}
+                    <div className="w-full h-3.5 rounded bg-slate-800 mb-1" />
+                    <div className="w-2/3 h-3.5 rounded bg-slate-800/70 mb-2" />
+                    {/* Barcode line */}
+                    <div className="w-20 h-2.5 rounded bg-slate-800/40" />
+                  </div>
+                  {/* Price & Add indicator footer */}
+                  <div className="mt-3 pt-2 border-t border-slate-800/60 flex items-center justify-between">
+                    <div className="w-16 h-4 rounded bg-slate-800" />
+                    <div className="w-6 h-6 rounded-lg bg-slate-800" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-500">
               <ShoppingBag className="w-12 h-12 mb-3 stroke-1 text-slate-600" />
               <p className="text-base font-semibold text-slate-400">No products match your search</p>
@@ -304,14 +334,22 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                     )}
 
                     <div>
-                      {/* Top icon and stock badge */}
+                      {/* Top icon / WebP image and stock badge */}
                       <div className="flex items-start justify-between gap-1 mb-2">
                         <div
-                          className={`w-9 h-9 rounded-lg flex items-center justify-center border ${
+                          className={`w-10 h-10 rounded-lg flex items-center justify-center border overflow-hidden shrink-0 ${
                             product.color || 'bg-slate-800 text-slate-300 border-slate-700'
                           }`}
                         >
-                          <ProductIcon name={product.iconName} className="w-5 h-5" />
+                          {product.image || product.images?.[0] ? (
+                            <img
+                              src={product.image || product.images?.[0]}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <ProductIcon name={product.iconName} className="w-5 h-5" />
+                          )}
                         </div>
 
                         {/* Stock indicator */}
@@ -329,6 +367,13 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                           </span>
                         )}
                       </div>
+
+                      {/* Brand Tag */}
+                      {product.brand && (
+                        <p className="text-[10px] font-semibold text-amber-400/90 tracking-wide uppercase truncate mb-0.5">
+                          {product.brand}
+                        </p>
+                      )}
 
                       {/* Product Name */}
                       <h4 className="text-xs font-semibold text-slate-100 group-hover:text-emerald-400 transition-colors line-clamp-2 leading-tight">

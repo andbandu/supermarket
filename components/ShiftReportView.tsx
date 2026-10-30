@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export default function ShiftReportView() {
-  const { shift, orders, settings, performCashDrop, closeShift, startNewShift, formatPrice } = usePOS();
+  const { shift, orders, settings, performCashDrop, closeShift, startNewShift, formatPrice, isLoading } = usePOS();
 
   const [actualDrawerCount, setActualDrawerCount] = useState<string>('');
   const [cashDropAmount, setCashDropAmount] = useState<string>('');
@@ -125,11 +125,18 @@ export default function ShiftReportView() {
               {shift.isClosed ? 'SHIFT CLOSED' : 'ACTIVE SHIFT'}
             </span>
           </div>
-          <div className="flex items-center gap-4 text-xs text-slate-400 mt-1 font-mono">
-            <span>Cashier: <strong className="text-slate-200">{shift.cashierName}</strong></span>
-            <span>&bull;</span>
-            <span>Started: {new Date(shift.startedAt).toLocaleString()}</span>
-          </div>
+          {isLoading || !shift.cashierName ? (
+            <div className="flex items-center gap-2 mt-1.5 animate-pulse">
+              <div className="h-4 w-32 bg-slate-800 rounded font-mono" />
+              <div className="h-4 w-40 bg-slate-800/60 rounded font-mono" />
+            </div>
+          ) : (
+            <div className="flex items-center gap-4 text-xs text-slate-400 mt-1 font-mono">
+              <span>Cashier: <strong className="text-slate-200">{shift.cashierName}</strong></span>
+              <span>&bull;</span>
+              <span>Started: {new Date(shift.startedAt).toLocaleString()}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 no-print">

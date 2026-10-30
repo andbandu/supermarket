@@ -18,12 +18,20 @@ create table if not exists products (
     stock integer not null check (stock >= 0),
     reorder_level integer not null default 5,
     unit text not null default 'pcs',
+    brand text,
+    image text,
+    images text[] default '{}',
     color text,
     icon_name text,
     is_taxable boolean not null default true,
     created_at timestamptz default now(),
     updated_at timestamptz default now()
 );
+
+-- Migrations for existing deployments
+alter table products add column if not exists brand text;
+alter table products add column if not exists image text;
+alter table products add column if not exists images text[] default '{}';
 
 create index if not exists idx_products_barcode on products (barcode);
 create index if not exists idx_products_category on products (category);

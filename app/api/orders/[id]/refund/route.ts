@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { validateApiAuth, unauthorizedResponse } from '@/lib/auth';
 import { prisma, isPrismaConfigured } from '@/lib/prisma';
 import { getSupabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
-import { refundOrderInLocalDb } from '@/lib/localDb';
 
 export async function POST(
   request: Request,
@@ -15,10 +14,10 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
   const refundReason = body.reason || 'Customer refund / return';
 
-  // 1. Prisma ORM Handler
+  // 1. Prisma ORM Handler (Primary)
   if (isPrismaConfigured()) {
     try {
-      // Find by ID or Receipt Number for maximum flexibility
+      // Find by ID or Receipt Number
       const order = await prisma.order.findFirst({
         where: {
           OR: [{ id: id }, { receiptNumber: id }],
@@ -34,7 +33,7 @@ export async function POST(
           );
         }
 
-        // Execute atomic refund transaction
+        // Execute atomic refund transaction in PostgreSQL
         await prisma.$transaction(async (tx) => {
           // Update order status
           await tx.order.update({
@@ -62,9 +61,6 @@ export async function POST(
           }
         });
 
-        // Also reflect in local DB
-        refundOrderInLocalDb(order.id, refundReason);
-
         return NextResponse.json({
           success: true,
           source: 'prisma_postgresql',
@@ -82,11 +78,10 @@ export async function POST(
     }
   }
 
-  // 2. Supabase Client Handler (when Prisma direct connection isn't configured)
+  // 2. Direct Supabase Client Handler
   const supabase = getSupabaseAdmin();
   if (supabase && isSupabaseConfigured()) {
     try {
-      // Find order by ID or Receipt Number
       let { data: order } = await supabase
         .from('orders')
         .select('*, order_items (*)')
@@ -110,7 +105,6 @@ export async function POST(
           );
         }
 
-        // Update status in orders table
         const { error: updateErr } = await supabase
           .from('orders')
           .update({
@@ -120,7 +114,6 @@ export async function POST(
           .eq('id', order.id);
 
         if (!updateErr) {
-          // Restore product stock in products table
           const items = (order.order_items as Array<Record<string, unknown>>) || [];
           for (const item of items) {
             if (item.product_id) {
@@ -144,9 +137,6 @@ export async function POST(
             }
           }
 
-          // Also reflect in local DB
-          refundOrderInLocalDb(order.id, refundReason);
-
           return NextResponse.json({
             success: true,
             source: 'supabase_postgres',
@@ -163,17 +153,6 @@ export async function POST(
     } catch (err: unknown) {
       console.error('Supabase refund error:', err);
     }
-  }
-
-  // 3. Fallback to Local Persistent File Database
-  const refunded = refundOrderInLocalDb(id, refundReason);
-  if (refunded) {
-    return NextResponse.json({
-      success: true,
-      source: 'local_file_database',
-      message: 'Order refunded and inventory stock restored in local database file (data/minimart_db.json)',
-      data: refunded,
-    });
   }
 
   return NextResponse.json(

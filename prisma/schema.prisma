@@ -21,6 +21,9 @@ model Product {
   stock        Int
   reorderLevel Int         @default(5) @map("reorder_level")
   unit         String      @default("pcs")
+  brand        String?
+  image        String?
+  images       String[]    @default([])
   color        String?
   iconName     String?     @map("icon_name")
   isTaxable    Boolean     @default(true) @map("is_taxable")
@@ -99,15 +102,15 @@ model Shift {
 
 model Settings {
   id             Int      @id @default(1)
-  storeName      String   @default("MINIMART EXPRESS") @map("store_name")
-  tagline        String?  @default("Your 24/7 Neighborhood Convenience Store")
-  storeAddress   String?  @default("124 Market Boulevard, Suite #102") @map("store_address")
-  storePhone     String?  @default("(555) 789-2044") @map("store_phone")
-  taxRatePercent Float    @default(7.0) @map("tax_rate_percent")
-  currencySymbol String   @default("$") @map("currency_symbol")
-  receiptFooter  String?  @default("Thank you for shopping with us! Please come again.") @map("receipt_footer")
+  storeName      String   @default("LANKA EXPRESS MINIMART") @map("store_name")
+  tagline        String?  @default("Your Friendly Neighborhood Supermarket")
+  storeAddress   String?  @default("No. 142 Galle Road, Colombo 03, Sri Lanka") @map("store_address")
+  storePhone     String?  @default("+94 11 258 9641") @map("store_phone")
+  taxRatePercent Float    @default(0.0) @map("tax_rate_percent")
+  currencySymbol String   @default("LKR") @map("currency_symbol")
+  receiptFooter  String?  @default("ස්තූතියි! නැවත එන්න | Thank you! Please come again.") @map("receipt_footer")
   soundEnabled   Boolean  @default(true) @map("sound_enabled")
-  activeCashier  String   @default("Sarah Jenkins (Cashier #04)") @map("active_cashier")
+  activeCashier  String   @default("Kasun Perera (Cashier #01)") @map("active_cashier")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
