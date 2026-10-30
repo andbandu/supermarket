@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { Product, ProductCategory, PRODUCT_UNITS } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
@@ -27,6 +27,7 @@ import {
   Tag,
   Check,
   ExternalLink,
+  Database,
 } from 'lucide-react';
 
 const CATEGORIES: ProductCategory[] = [
@@ -57,11 +58,63 @@ const POPULAR_BRANDS = [
 ];
 
 export default function InventoryView() {
-  const { products, addProduct, updateProduct, restockProduct, deleteProduct, settings, formatPrice, isLoading } = usePOS();
+  const {
+    products,
+    categories: registeredCategories,
+    brands: registeredBrands,
+    addProduct,
+    updateProduct,
+    restockProduct,
+    deleteProduct,
+    settings,
+    formatPrice,
+    isLoading,
+    searchQuery,
+    setSearchQuery,
+    selectedCategory,
+    setSelectedCategory,
+  } = usePOS();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [filterLowStockOnly, setFilterLowStockOnly] = useState(false);
+  const [isCustomBrand, setIsCustomBrand] = useState(false);
+
+  // Categories retrieved dynamically from PostgreSQL database
+  const categoryOptions = useMemo(() => {
+    const list: string[] = [];
+    if (registeredCategories && registeredCategories.length > 0) {
+      registeredCategories.forEach((c) => {
+        if (!list.includes(c.name)) list.push(c.name);
+      });
+    }
+    CATEGORIES.filter((c) => c !== 'All').forEach((c) => {
+      if (!list.includes(c)) list.push(c);
+    });
+    return list;
+  }, [registeredCategories]);
+
+  const availableCategories = useMemo(() => {
+    return ['All', ...categoryOptions];
+  }, [categoryOptions]);
+
+  // Brands retrieved dynamically from PostgreSQL database
+  const brandOptions = useMemo(() => {
+    const list: string[] = [];
+    if (registeredBrands && registeredBrands.length > 0) {
+      registeredBrands.forEach((b) => {
+        if (b.isActive && !list.includes(b.name)) list.push(b.name);
+      });
+    }
+    // Also include any distinct brands already attached to products
+    products.forEach((p) => {
+      if (p.brand && p.brand.trim() && !list.includes(p.brand.trim())) {
+        list.push(p.brand.trim());
+      }
+    });
+    if (list.length === 0) {
+      POPULAR_BRANDS.forEach((b) => list.push(b));
+    }
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [registeredBrands, products]);
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -83,6 +136,7 @@ export default function InventoryView() {
     category: 'Beverages' as ProductCategory,
     price: '',
     costPrice: '',
+    discountPrice: '',
     stock: '',
     reorderLevel: '5',
     unit: 'pcs',
@@ -107,13 +161,16 @@ export default function InventoryView() {
   });
 
   const handleOpenAddModal = () => {
+    setIsCustomBrand(false);
+    const defaultCat = (categoryOptions[0] || 'Beverages') as ProductCategory;
     setFormData({
       name: '',
       brand: '',
       barcode: '479' + Math.floor(100000000 + Math.random() * 900000000),
-      category: 'Beverages',
+      category: defaultCat,
       price: '250.00',
       costPrice: '180.00',
+      discountPrice: '',
       stock: '24',
       reorderLevel: '6',
       unit: 'pack',
@@ -135,6 +192,8 @@ export default function InventoryView() {
     while (existingImages.length < 4) {
       existingImages.push('');
     }
+    const hasBrandInList = p.brand ? brandOptions.includes(p.brand) : true;
+    setIsCustomBrand(!hasBrandInList);
     setFormData({
       name: p.name,
       brand: p.brand || '',
@@ -142,6 +201,7 @@ export default function InventoryView() {
       category: p.category,
       price: p.price.toString(),
       costPrice: p.costPrice.toString(),
+      discountPrice: p.discountPrice && p.discountPrice > 0 ? p.discountPrice.toString() : '',
       stock: p.stock.toString(),
       reorderLevel: p.reorderLevel.toString(),
       unit: p.unit || 'pcs',
@@ -237,8 +297,15 @@ export default function InventoryView() {
 
     const price = parseFloat(formData.price) || 0;
     const costPrice = parseFloat(formData.costPrice) || 0;
+    const discountPrice = Math.max(0, parseFloat(formData.discountPrice) || 0);
     const stock = parseInt(formData.stock, 10) || 0;
     const reorderLevel = parseInt(formData.reorderLevel, 10) || 5;
+
+    if (discountPrice > 0 && discountPrice >= price) {
+      soundManager.playError();
+      toast.warning('Discount selling price must be lower than regular price.', 'Invalid Discount Price');
+      return;
+    }
 
     const filteredImages = formData.images.filter((img) => img.trim().length > 0);
     const primaryImage = filteredImages[0] || '';
@@ -252,6 +319,7 @@ export default function InventoryView() {
         category: formData.category,
         price,
         costPrice,
+        discountPrice: discountPrice > 0 ? discountPrice : 0,
         stock,
         reorderLevel,
         unit: formData.unit,
@@ -269,6 +337,7 @@ export default function InventoryView() {
         category: formData.category,
         price,
         costPrice,
+        discountPrice: discountPrice > 0 ? discountPrice : 0,
         stock,
         reorderLevel,
         unit: formData.unit,
@@ -391,7 +460,7 @@ export default function InventoryView() {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="bg-slate-950 text-white px-3 py-2 rounded-lg border border-slate-700/80 text-xs focus:border-emerald-500"
           >
-            {CATEGORIES.map((cat) => (
+            {availableCategories.map((cat: string) => (
               <option key={cat} value={cat}>
                 {cat}
               </option>
@@ -552,7 +621,21 @@ export default function InventoryView() {
                       {formatPrice(p.costPrice)}
                     </td>
                     <td className="p-3 text-right font-mono font-bold text-slate-100">
-                      {formatPrice(p.price)}
+                      {p.discountPrice && p.discountPrice > 0 && p.discountPrice < p.price ? (
+                        <div>
+                          <span className="text-[10px] text-slate-500 line-through block leading-none">
+                            {formatPrice(p.price)}
+                          </span>
+                          <span className="text-emerald-400">
+                            {formatPrice(p.discountPrice)}
+                          </span>
+                          <span className="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 px-1 py-0.2 rounded border border-cyan-500/20 inline-block mt-0.5">
+                            Save {formatPrice(p.price - p.discountPrice)}
+                          </span>
+                        </div>
+                      ) : (
+                        formatPrice(p.price)
+                      )}
                     </td>
                     <td className="p-3 text-right font-mono text-emerald-400 font-semibold">
                       {margin}%
@@ -775,32 +858,57 @@ export default function InventoryView() {
                       <Tag className="w-3.5 h-3.5 text-amber-400" />
                       <span>Brand Name</span>
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Storefront & App</span>
+                    
                   </label>
-                  <input
-                    type="text"
-                    value={formData.brand}
-                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                    placeholder="e.g. Elephant House, Munchee, Maliban"
-                    className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg focus:border-emerald-500"
-                  />
-                  {/* Quick brand chips */}
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {POPULAR_BRANDS.slice(0, 6).map((b) => (
+
+                  {isCustomBrand ? (
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Type custom brand name..."
+                        value={formData.brand}
+                        onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                        className="flex-1 bg-slate-950 border border-amber-500/50 text-white px-3 py-2 rounded-lg focus:border-amber-400 text-xs"
+                      />
                       <button
                         type="button"
-                        key={b}
-                        onClick={() => setFormData({ ...formData, brand: b })}
-                        className={`px-1.5 py-0.5 rounded text-[10px] transition ${
-                          formData.brand === b
-                            ? 'bg-amber-500 text-slate-950 font-bold'
-                            : 'bg-slate-800 text-slate-400 hover:text-white'
-                        }`}
+                        onClick={() => {
+                          setIsCustomBrand(false);
+                          if (!brandOptions.includes(formData.brand)) {
+                            setFormData({ ...formData, brand: '' });
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] font-medium transition shrink-0 border border-slate-750"
+                        title="Choose from registered database brands"
                       >
-                        {b}
+                        Choose from list
                       </button>
-                    ))}
-                  </div>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.brand}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW__') {
+                          setIsCustomBrand(true);
+                          setFormData({ ...formData, brand: '' });
+                        } else {
+                          setFormData({ ...formData, brand: e.target.value });
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg focus:border-emerald-500 text-xs font-medium"
+                    >
+                      <option value="">-- Select Brand from Database (or None) --</option>
+                      {brandOptions.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                      <option value="__NEW__">+ Enter custom / new brand...</option>
+                    </select>
+                  )}
+
+                  
                 </div>
               </div>
 
@@ -818,15 +926,21 @@ export default function InventoryView() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Category</label>
+                  <label className="block text-slate-300 font-semibold mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Category</span> <span className="text-rose-400">*</span>
+                    </span>
+                    
+                  </label>
                   <select
                     value={formData.category}
                     onChange={(e) =>
                       setFormData({ ...formData, category: e.target.value as ProductCategory })
                     }
-                    className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg focus:border-emerald-500"
+                    className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg focus:border-emerald-500 text-xs font-medium"
                   >
-                    {CATEGORIES.filter((c) => c !== 'All').map((cat) => (
+                    {categoryOptions.map((cat: string) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>
@@ -835,8 +949,8 @@ export default function InventoryView() {
                 </div>
               </div>
 
-              {/* Cost Price & Selling Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* Cost Price, Selling Price & Native Item Discount */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">
                     Cost Price ({settings.currencySymbol})
@@ -864,6 +978,33 @@ export default function InventoryView() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg font-mono focus:border-emerald-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-cyan-300 font-semibold mb-1">
+                    Discount Selling Price ({settings.currencySymbol}) (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 136.00"
+                    value={formData.discountPrice}
+                    onChange={(e) => setFormData({ ...formData, discountPrice: e.target.value })}
+                    className="w-full bg-slate-950 border border-cyan-500/40 text-white px-3 py-2 rounded-lg font-mono focus:border-cyan-400"
+                  />
+                  {parseFloat(formData.discountPrice) > 0 && parseFloat(formData.price) > 0 && (
+                    <p className="text-[10px] text-cyan-400 mt-1 font-mono">
+                      {parseFloat(formData.discountPrice) < parseFloat(formData.price) ? (
+                        <>
+                          Sale: {formatPrice(parseFloat(formData.discountPrice))} (Save{' '}
+                          {formatPrice(parseFloat(formData.price) - parseFloat(formData.discountPrice))})
+                        </>
+                      ) : (
+                        <span className="text-rose-400">Must be lower than regular price</span>
+                      )}
+                    </p>
+                  )}
                 </div>
               </div>
 

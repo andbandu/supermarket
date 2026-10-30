@@ -16,6 +16,10 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
   if (!isOpen || !lastCompletedOrder) return null;
 
   const order = lastCompletedOrder;
+  const grossAmount =
+    order.grossAmount !== undefined && order.grossAmount > 0
+      ? order.grossAmount
+      : order.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
   const handlePrint = () => {
     soundManager.playClick();
@@ -97,7 +101,11 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
                     <div className="flex justify-between text-[10px] text-zinc-600">
                       <span>
                         {item.quantity} x {formatPrice(item.unitPrice)}
-                        {item.discountPercent > 0 && ` (-${item.discountPercent}%)`}
+                        {item.totalPrice < item.quantity * item.unitPrice && (
+                          <span className="font-semibold text-zinc-800">
+                            {' '}(Special: {formatPrice(item.totalPrice / item.quantity)})
+                          </span>
+                        )}
                       </span>
                       <span>#{item.barcode.slice(-4)}</span>
                     </div>
@@ -108,22 +116,33 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
 
             {/* Totals */}
             <div className="py-2.5 border-b border-dashed border-zinc-400 space-y-1 text-[11px]">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>{formatPrice(order.subtotal)}</span>
+              <div className="flex justify-between font-semibold">
+                <span>Gross Amount:</span>
+                <span>{formatPrice(grossAmount)}</span>
               </div>
 
               {order.discountAmount > 0 && (
-                <div className="flex justify-between text-zinc-600">
-                  <span>Total Discount:</span>
-                  <span>-{formatPrice(order.discountAmount)}</span>
-                </div>
+                <>
+                  <div className="flex justify-between text-zinc-700 font-semibold">
+                    <span>
+                      Discount {order.appliedDiscountCode ? `(${order.appliedDiscountCode})` : ''}:
+                    </span>
+                    <span>-{formatPrice(order.discountAmount)}</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span>Net Subtotal:</span>
+                    <span>{formatPrice(order.subtotal)}</span>
+                  </div>
+                </>
               )}
 
-              <div className="flex justify-between">
-                <span>Tax ({settings.taxRatePercent}%):</span>
-                <span>{formatPrice(order.taxAmount)}</span>
-              </div>
+              {(settings.taxRatePercent > 0 || order.taxAmount > 0) && (
+                <div className="flex justify-between">
+                  <span>Tax ({settings.taxRatePercent}%):</span>
+                  <span>{formatPrice(order.taxAmount)}</span>
+                </div>
+              )}
 
               <div className="flex justify-between font-black text-sm pt-1.5 border-t border-zinc-400">
                 <span>TOTAL DUE:</span>

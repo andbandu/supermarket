@@ -16,7 +16,8 @@ export async function GET(
     try {
       const rows = await prisma.$queryRawUnsafe<any[]>(`
         SELECT id, barcode, name, category, price, cost_price, stock, reorder_level, unit, 
-               brand, image, images, color, icon_name, is_taxable 
+               brand, image, images, color, icon_name, is_taxable,
+               COALESCE(discount_price, 0.0) AS discount_price
         FROM products 
         WHERE id = $1 
         LIMIT 1
@@ -40,6 +41,7 @@ export async function GET(
           color: p.color ? String(p.color) : undefined,
           iconName: p.icon_name ? String(p.icon_name) : undefined,
           isTaxable: Boolean(p.is_taxable ?? true),
+          discountPrice: Number(p.discount_price ?? 0),
         };
         return NextResponse.json({ success: true, source: 'prisma_postgresql', data: formatted });
       }
@@ -92,6 +94,7 @@ export async function PUT(
     }
   }
   if (body.isTaxable !== undefined) updateData.isTaxable = Boolean(body.isTaxable);
+  if (body.discountPrice !== undefined) updateData.discountPrice = Number(body.discountPrice);
 
   // 1. Prisma ORM (via direct SQL to support brand, image, and images array)
   if (isPrismaConfigured()) {
@@ -110,6 +113,7 @@ export async function PUT(
            image = CASE WHEN $12::boolean THEN $13 ELSE image END,
            images = CASE WHEN $14::boolean THEN $15::text[] ELSE images END,
            is_taxable = COALESCE($16, is_taxable),
+           discount_price = COALESCE($17, discount_price),
            updated_at = NOW()
          WHERE id = $1`,
         id,
@@ -127,7 +131,8 @@ export async function PUT(
         updateData.image ? String(updateData.image) : null,
         body.images !== undefined,
         (updateData.images as string[]) || [],
-        body.isTaxable !== undefined ? Boolean(body.isTaxable) : null
+        body.isTaxable !== undefined ? Boolean(body.isTaxable) : null,
+        body.discountPrice !== undefined ? Number(body.discountPrice) : null
       );
 
       return NextResponse.json({ success: true, source: 'prisma_postgresql', data: { id, ...updateData } });
@@ -152,6 +157,10 @@ export async function PUT(
       if ('isTaxable' in supaUpdate) {
         supaUpdate.is_taxable = supaUpdate.isTaxable;
         delete supaUpdate.isTaxable;
+      }
+      if ('discountPrice' in supaUpdate) {
+        supaUpdate.discount_price = supaUpdate.discountPrice;
+        delete supaUpdate.discountPrice;
       }
       const { data, error } = await supabase.from('products').update(supaUpdate).eq('id', id).select().single();
       if (!error) {

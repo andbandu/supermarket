@@ -10,6 +10,9 @@ import {
   POSSettings,
   PaymentMethod,
   OrderItem,
+  Discount,
+  Category,
+  Brand,
 } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
 import { apiClient } from '@/lib/apiClient';
@@ -18,13 +21,17 @@ import { formatCurrency } from '@/lib/currency';
 
 interface POSContextType {
   products: Product[];
+  categories: Category[];
+  brands: Brand[];
   cart: CartItem[];
   heldOrders: HeldOrder[];
   orders: Order[];
+  discounts: Discount[];
+  appliedDiscount: Discount | null;
   settings: POSSettings;
   shift: CashierShift;
-  activeTab: 'pos' | 'inventory' | 'history' | 'shift' | 'settings';
-  setActiveTab: (tab: 'pos' | 'inventory' | 'history' | 'shift' | 'settings') => void;
+  activeTab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'history' | 'shift' | 'settings';
+  setActiveTab: (tab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'history' | 'shift' | 'settings') => void;
   isPaymentModalOpen: boolean;
   setIsPaymentModalOpen: (open: boolean) => void;
   lastCompletedOrder: Order | null;
@@ -50,7 +57,28 @@ interface POSContextType {
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
 
+  // Discount Management Actions
+  applyDiscountRule: (discount: Discount | null) => { success: boolean; message?: string };
+  applyDiscountByCode: (code: string) => { success: boolean; message?: string };
+  removeAppliedDiscount: () => void;
+  createDiscountRule: (discount: Omit<Discount, 'id' | 'usageCount' | 'createdAt' | 'updatedAt'>) => Promise<boolean>;
+  updateDiscountRule: (id: string, discount: Partial<Discount>) => Promise<boolean>;
+  toggleDiscountActive: (id: string, active: boolean) => Promise<boolean>;
+  deleteDiscountRule: (id: string) => Promise<boolean>;
+
+  // Category & Brand Management Actions
+  createCategory: (category: Omit<Category, 'id' | 'productCount' | 'createdAt' | 'updatedAt'> & { id?: string }) => Promise<boolean>;
+  updateCategory: (id: string, category: Partial<Category>) => Promise<boolean>;
+  deleteCategory: (id: string) => Promise<boolean>;
+  createBrand: (brand: Omit<Brand, 'id' | 'productCount' | 'createdAt' | 'updatedAt'> & { id?: string }) => Promise<boolean>;
+  updateBrand: (id: string, brand: Partial<Brand>) => Promise<boolean>;
+  deleteBrand: (id: string) => Promise<boolean>;
+
   // Calculations
+  cartGrossSubtotal: number;
+  cartLineDiscount: number;
+  cartOrderDiscount: number;
+  cartTotalDiscount: number;
   cartSubtotal: number;
   cartTax: number;
   cartTotal: number;
@@ -106,6 +134,10 @@ const EMPTY_SHIFT: CashierShift = {
 export function POSProvider({ children }: { children: React.ReactNode }) {
   // Real-time online state: initialized empty with skeleton loading until live API connects
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [appliedDiscount, setAppliedDiscount] = useState<Discount | null>(null);
   const [settings, setSettings] = useState<POSSettings>(EMPTY_SETTINGS);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
@@ -113,7 +145,7 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const [shift, setShift] = useState<CashierShift>(EMPTY_SHIFT);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'history' | 'shift' | 'settings'>('pos');
+  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'catalog' | 'discounts' | 'history' | 'shift' | 'settings'>('pos');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -176,6 +208,24 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       if (shiftRes && shiftRes.success && shiftRes.data) {
         setShift(shiftRes.data);
       }
+
+      // 7. Fetch live discounts & promotional rules from PostgreSQL
+      const discRes = await apiClient.getDiscounts();
+      if (discRes && discRes.success && Array.isArray(discRes.data)) {
+        setDiscounts(discRes.data);
+      }
+
+      // 8. Fetch live categories from PostgreSQL
+      const catRes = await apiClient.getCategories();
+      if (catRes && catRes.success && Array.isArray(catRes.data)) {
+        setCategories(catRes.data);
+      }
+
+      // 9. Fetch live brands from PostgreSQL
+      const brandRes = await apiClient.getBrands();
+      if (brandRes && brandRes.success && Array.isArray(brandRes.data)) {
+        setBrands(brandRes.data);
+      }
     } catch (err) {
       console.warn('Real-time database sync warning:', err);
     } finally {
@@ -203,23 +253,80 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   }, [settings.soundEnabled]);
 
   // Calculations
-  const cartSubtotal = useMemo(() => {
+  const cartGrossSubtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
       const unitPrice = item.customPrice ?? item.product.price;
-      const discounted = unitPrice * (1 - item.discountPercent / 100);
-      return sum + discounted * item.quantity;
+      return sum + unitPrice * item.quantity;
     }, 0);
   }, [cart]);
 
-  const cartTax = useMemo(() => {
+  // Line-item discounts sum (handles native discountPrice and manual percentage discounts)
+  const cartLineDiscount = useMemo(() => {
     return cart.reduce((sum, item) => {
+      const unitPrice = item.customPrice ?? item.product.price;
+      if (item.discountPrice && item.discountPrice > 0 && item.discountPrice < unitPrice) {
+        return sum + (unitPrice - item.discountPrice) * item.quantity;
+      }
+      if (item.discountPercent > 0) {
+        return sum + unitPrice * (item.discountPercent / 100) * item.quantity;
+      }
+      return sum;
+    }, 0);
+  }, [cart]);
+
+  // Order/Promotion Rule discount
+  const cartOrderDiscount = useMemo(() => {
+    if (!appliedDiscount || !appliedDiscount.isActive) return 0;
+    const baseSubtotal = Math.max(0, cartGrossSubtotal - cartLineDiscount);
+    if (appliedDiscount.minOrderAmount && baseSubtotal < appliedDiscount.minOrderAmount) {
+      return 0;
+    }
+
+    if (appliedDiscount.type === 'PERCENTAGE') {
+      return (baseSubtotal * appliedDiscount.value) / 100;
+    }
+    if (appliedDiscount.type === 'FIXED_AMOUNT') {
+      return Math.min(baseSubtotal, appliedDiscount.value);
+    }
+    if (appliedDiscount.type === 'CATEGORY_PERCENT') {
+      const catGross = cart.reduce((sum, item) => {
+        if (item.product.category === appliedDiscount.targetCategory) {
+          const unitPrice = item.customPrice ?? item.product.price;
+          const afterLine = unitPrice * (1 - item.discountPercent / 100);
+          return sum + afterLine * item.quantity;
+        }
+        return sum;
+      }, 0);
+      return (catGross * appliedDiscount.value) / 100;
+    }
+    return 0;
+  }, [cart, cartGrossSubtotal, cartLineDiscount, appliedDiscount]);
+
+  // Total discount (item discounts + order promo discount)
+  const cartTotalDiscount = useMemo(() => {
+    return Number((cartLineDiscount + cartOrderDiscount).toFixed(2));
+  }, [cartLineDiscount, cartOrderDiscount]);
+
+  // Net subtotal after all discounts
+  const cartSubtotal = useMemo(() => {
+    return Math.max(0, Number((cartGrossSubtotal - cartTotalDiscount).toFixed(2)));
+  }, [cartGrossSubtotal, cartTotalDiscount]);
+
+  const cartTax = useMemo(() => {
+    if (settings.taxRatePercent <= 0) return 0;
+    const taxableGross = cart.reduce((sum, item) => {
       if (!item.product.isTaxable) return sum;
       const unitPrice = item.customPrice ?? item.product.price;
-      const discounted = unitPrice * (1 - item.discountPercent / 100);
-      const itemSubtotal = discounted * item.quantity;
-      return sum + itemSubtotal * (settings.taxRatePercent / 100);
+      const discounted = item.discountPrice && item.discountPrice > 0 && item.discountPrice < unitPrice
+        ? item.discountPrice
+        : unitPrice * (1 - item.discountPercent / 100);
+      return sum + discounted * item.quantity;
     }, 0);
-  }, [cart, settings.taxRatePercent]);
+
+    const discountRatio = cartGrossSubtotal > 0 ? cartSubtotal / cartGrossSubtotal : 1;
+    const effectiveTaxable = taxableGross * discountRatio;
+    return Number((effectiveTaxable * (settings.taxRatePercent / 100)).toFixed(2));
+  }, [cart, cartGrossSubtotal, cartSubtotal, settings.taxRatePercent]);
 
   const cartTotal = useMemo(() => {
     return Number((cartSubtotal + cartTax).toFixed(2));
@@ -259,10 +366,33 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         };
         return next;
       } else {
-        return [...prev, { product, quantity: qty, discountPercent: 0 }];
+        // Automatically apply native product discount price or active item-level discount rule
+        const itemDiscountRule = discounts.find(
+          (d) => d.isActive && d.scope === 'PRODUCT' && d.targetProductId === product.id
+        );
+        const nativeDiscountPrice =
+          product.discountPrice && product.discountPrice > 0 && product.discountPrice < product.price
+            ? product.discountPrice
+            : itemDiscountRule && itemDiscountRule.value > 0 && itemDiscountRule.value < product.price
+            ? itemDiscountRule.value
+            : undefined;
+
+        const effectiveDiscountPercent = nativeDiscountPrice
+          ? Number((((product.price - nativeDiscountPrice) / product.price) * 100).toFixed(2))
+          : 0;
+
+        return [
+          ...prev,
+          {
+            product,
+            quantity: qty,
+            discountPrice: nativeDiscountPrice,
+            discountPercent: effectiveDiscountPercent,
+          },
+        ];
       }
     });
-  }, [cart]);
+  }, [cart, discounts]);
 
   const addByBarcode = useCallback((barcode: string): boolean => {
     const clean = barcode.trim();
@@ -405,7 +535,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
       const orderItems: OrderItem[] = cart.map((item) => {
         const unitPrice = item.customPrice ?? item.product.price;
-        const lineTotal = unitPrice * (1 - item.discountPercent / 100) * item.quantity;
+        const lineTotal = item.discountPrice && item.discountPrice > 0 && item.discountPrice < unitPrice
+          ? item.discountPrice * item.quantity
+          : unitPrice * (1 - item.discountPercent / 100) * item.quantity;
         return {
           productId: item.product.id,
           productName: item.product.name,
@@ -430,13 +562,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         receiptNumber: orderNumber,
         timestamp: new Date().toISOString(),
         items: orderItems,
+        grossAmount: Number(cartGrossSubtotal.toFixed(2)),
         subtotal: Number(cartSubtotal.toFixed(2)),
-        discountAmount: Number(
-          cart.reduce((sum, item) => {
-            const unitPrice = item.customPrice ?? item.product.price;
-            return sum + (unitPrice * (item.discountPercent / 100)) * item.quantity;
-          }, 0).toFixed(2)
-        ),
+        discountAmount: cartTotalDiscount,
         taxAmount: Number(cartTax.toFixed(2)),
         total: cartTotal,
         paymentMethod,
@@ -444,6 +572,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         changeGiven: Number(changeGiven.toFixed(2)),
         cashierName: settings.activeCashier,
         status: 'COMPLETED',
+        appliedDiscountId: appliedDiscount?.id,
+        appliedDiscountName: appliedDiscount?.name,
+        appliedDiscountCode: appliedDiscount?.code,
         notes,
       };
 
@@ -474,6 +605,10 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
       setLastCompletedOrder(completedOrder);
       setCart([]);
+      if (appliedDiscount) {
+        apiClient.updateDiscount(appliedDiscount.id, { incrementUsage: true }).catch(() => {});
+        setAppliedDiscount(null);
+      }
       setIsPaymentModalOpen(false);
 
       // 4. Concurrently push to Secure Next.js API -> Supabase PostgreSQL
@@ -571,6 +706,276 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [orders, refreshFromApi]
+  );
+
+  // Discount Management Actions
+  const applyDiscountRule = useCallback(
+    (discount: Discount | null): { success: boolean; message?: string } => {
+      if (!discount) {
+        setAppliedDiscount(null);
+        return { success: true, message: 'Discount removed' };
+      }
+      if (!discount.isActive) {
+        soundManager.playError();
+        return { success: false, message: 'This promotion is currently inactive.' };
+      }
+      if (discount.minOrderAmount && cartGrossSubtotal < discount.minOrderAmount) {
+        soundManager.playError();
+        return {
+          success: false,
+          message: `Minimum order amount of ${formatCurrency(discount.minOrderAmount, settings.currencySymbol)} required for this discount.`,
+        };
+      }
+      setAppliedDiscount(discount);
+      soundManager.playSuccess();
+      return { success: true, message: `Applied promotion: "${discount.name}"` };
+    },
+    [cartGrossSubtotal, settings.currencySymbol]
+  );
+
+  const applyDiscountByCode = useCallback(
+    (rawCode: string): { success: boolean; message?: string } => {
+      const code = rawCode.trim().toUpperCase();
+      if (!code) {
+        return { success: false, message: 'Please enter a coupon code.' };
+      }
+      const matched = discounts.find(
+        (d) => d.code && d.code.toUpperCase() === code && d.isActive
+      );
+      if (!matched) {
+        soundManager.playError();
+        return { success: false, message: `Coupon code "${code}" is invalid or inactive.` };
+      }
+      return applyDiscountRule(matched);
+    },
+    [discounts, applyDiscountRule]
+  );
+
+  const removeAppliedDiscount = useCallback(() => {
+    setAppliedDiscount(null);
+    soundManager.playClick();
+  }, []);
+
+  const createDiscountRule = useCallback(
+    async (newDisc: Omit<Discount, 'id' | 'usageCount' | 'createdAt' | 'updatedAt'>): Promise<boolean> => {
+      try {
+        const res = await apiClient.createDiscount(newDisc);
+        if (res.success && res.data) {
+          soundManager.playSuccess();
+          toast.success(`Promotion "${newDisc.name}" created!`, 'Discount Created');
+          await refreshFromApi();
+          return true;
+        } else {
+          soundManager.playError();
+          toast.error(res.error || 'Failed to create discount rule', 'Error');
+          return false;
+        }
+      } catch (err: unknown) {
+        soundManager.playError();
+        toast.error('Network error creating discount', 'Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const updateDiscountRule = useCallback(
+    async (id: string, updated: Partial<Discount>): Promise<boolean> => {
+      try {
+        const res = await apiClient.updateDiscount(id, updated);
+        if (res.success) {
+          soundManager.playSuccess();
+          toast.success('Discount rule updated!', 'Updated');
+          await refreshFromApi();
+          return true;
+        } else {
+          soundManager.playError();
+          toast.error(res.error || 'Failed to update discount', 'Error');
+          return false;
+        }
+      } catch (err) {
+        soundManager.playError();
+        toast.error('Network error updating discount', 'Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const toggleDiscountActive = useCallback(
+    async (id: string, active: boolean): Promise<boolean> => {
+      try {
+        const res = await apiClient.updateDiscount(id, { isActive: active });
+        if (res.success) {
+          setDiscounts((prev) =>
+            prev.map((d) => (d.id === id ? { ...d, isActive: active } : d))
+          );
+          if (!active && appliedDiscount?.id === id) {
+            setAppliedDiscount(null);
+          }
+          soundManager.playClick();
+          toast.info(`Discount ${active ? 'activated' : 'deactivated'}`, 'Status Changed');
+          await refreshFromApi();
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    [appliedDiscount]
+  );
+
+  const deleteDiscountRule = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        const res = await apiClient.deleteDiscount(id);
+        if (res.success) {
+          soundManager.playClick();
+          toast.info('Discount rule deleted', 'Deleted');
+          if (appliedDiscount?.id === id) {
+            setAppliedDiscount(null);
+          }
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to delete discount', 'Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error deleting discount', 'Error');
+        return false;
+      }
+    },
+    [appliedDiscount, refreshFromApi]
+  );
+
+  // Category Actions
+  const createCategory = useCallback(
+    async (category: Omit<Category, 'id' | 'productCount' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<boolean> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.createCategory(category);
+        if (res.success) {
+          toast.success(`Category "${category.name}" created`, 'Category Saved');
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to create category', 'Database Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error creating category', 'Connection Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const updateCategory = useCallback(
+    async (id: string, category: Partial<Category>): Promise<boolean> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.updateCategory(id, category);
+        if (res.success) {
+          toast.success('Category updated successfully', 'Saved');
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to update category', 'Database Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error updating category', 'Connection Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const deleteCategory = useCallback(
+    async (id: string): Promise<boolean> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.deleteCategory(id);
+        if (res.success) {
+          toast.info('Category deleted', 'Deleted');
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to delete category', 'Database Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error deleting category', 'Connection Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  // Brand Actions
+  const createBrand = useCallback(
+    async (brand: Omit<Brand, 'id' | 'productCount' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<boolean> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.createBrand(brand);
+        if (res.success) {
+          toast.success(`Brand "${brand.name}" created`, 'Brand Saved');
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to create brand', 'Database Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error creating brand', 'Connection Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const updateBrand = useCallback(
+    async (id: string, brand: Partial<Brand>): Promise<boolean> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.updateBrand(id, brand);
+        if (res.success) {
+          toast.success('Brand updated successfully', 'Saved');
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to update brand', 'Database Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error updating brand', 'Connection Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const deleteBrand = useCallback(
+    async (id: string): Promise<boolean> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.deleteBrand(id);
+        if (res.success) {
+          toast.info('Brand deleted', 'Deleted');
+          await refreshFromApi();
+          return true;
+        } else {
+          toast.error(res.error || 'Failed to delete brand', 'Database Error');
+          return false;
+        }
+      } catch {
+        toast.error('Network error deleting brand', 'Connection Error');
+        return false;
+      }
+    },
+    [refreshFromApi]
   );
 
   const addProduct = useCallback(
@@ -704,9 +1109,13 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     <POSContext.Provider
       value={{
         products,
+        categories,
+        brands,
         cart,
         heldOrders,
         orders,
+        discounts,
+        appliedDiscount,
         settings,
         shift,
         activeTab,
@@ -731,6 +1140,23 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         setItemDiscount,
         removeFromCart,
         clearCart,
+        applyDiscountRule,
+        applyDiscountByCode,
+        removeAppliedDiscount,
+        createDiscountRule,
+        updateDiscountRule,
+        toggleDiscountActive,
+        deleteDiscountRule,
+        createCategory,
+        updateCategory,
+        deleteCategory,
+        createBrand,
+        updateBrand,
+        deleteBrand,
+        cartGrossSubtotal,
+        cartLineDiscount,
+        cartOrderDiscount,
+        cartTotalDiscount,
         cartSubtotal,
         cartTax,
         cartTotal,

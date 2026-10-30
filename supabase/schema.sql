@@ -32,6 +32,7 @@ create table if not exists products (
 alter table products add column if not exists brand text;
 alter table products add column if not exists image text;
 alter table products add column if not exists images text[] default '{}';
+alter table products add column if not exists discount_price numeric(10, 2) default 0.00;
 
 create index if not exists idx_products_barcode on products (barcode);
 create index if not exists idx_products_category on products (category);
@@ -83,6 +84,32 @@ create table if not exists held_orders (
     subtotal numeric(10, 2) not null,
     total numeric(10, 2) not null,
     cashier_name text not null
+);
+
+-- 5.1 CATEGORIES TABLE
+create table if not exists categories (
+    id text primary key,
+    name text unique not null,
+    slug text unique not null,
+    description text,
+    icon_name text default 'Package',
+    color text default 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    is_active boolean not null default true,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+-- 5.2 BRANDS TABLE
+create table if not exists brands (
+    id text primary key,
+    name text unique not null,
+    slug text unique not null,
+    description text,
+    origin text default 'Sri Lanka',
+    logo text,
+    is_active boolean not null default true,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
 );
 
 -- 6. SHIFTS TABLE (Cashier shifts & daily Z-Reports)
@@ -187,4 +214,32 @@ values
   ('prod-035', '479101100035', 'Flora Soft 2-Ply Facial Tissue Box 150s', 'Household & Personal', 320.00, 260.00, 18, 5, 'box', 'bg-pink-500/10 text-pink-400 border-pink-500/30', 'Box', true),
   ('prod-036', '479101100036', 'Dettol Antiseptic Disinfectant Liquid 100ml', 'Household & Personal', 380.00, 310.00, 14, 4, 'bottle', 'bg-amber-600/10 text-amber-500 border-amber-600/30', 'Droplets', true)
 on conflict (id) do nothing;
+
+-- 6. DISCOUNTS TABLE
+create table if not exists discounts (
+    id text primary key,
+    name text not null,
+    code text unique,
+    type text not null,
+    value numeric(10, 2) not null,
+    scope text not null default 'ORDER',
+    target_category text,
+    target_product_id text,
+    target_product_name text,
+    min_order_amount numeric(10, 2) default 0,
+    start_date timestamptz default now(),
+    end_date timestamptz,
+    is_active boolean not null default true,
+    usage_count integer not null default 0,
+    description text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+alter table discounts add column if not exists target_product_id text;
+alter table discounts add column if not exists target_product_name text;
+
+create index if not exists idx_discounts_code on discounts (code);
+create index if not exists idx_discounts_active on discounts (is_active);
+create index if not exists idx_discounts_target_prod on discounts (target_product_id);
 

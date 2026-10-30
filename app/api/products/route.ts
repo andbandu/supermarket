@@ -15,7 +15,8 @@ export async function GET(request: Request) {
     try {
       const dbProducts = await prisma.$queryRawUnsafe<any[]>(`
         SELECT id, barcode, name, category, price, cost_price, stock, reorder_level, unit, 
-               brand, image, images, color, icon_name, is_taxable 
+               brand, image, images, color, icon_name, is_taxable,
+               COALESCE(discount_price, 0.0) AS discount_price
         FROM products 
         ORDER BY name ASC
       `);
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
         color: p.color ? String(p.color) : undefined,
         iconName: p.icon_name ? String(p.icon_name) : undefined,
         isTaxable: Boolean(p.is_taxable ?? true),
+        discountPrice: Number(p.discount_price ?? 0),
       }));
 
       return NextResponse.json({
@@ -74,6 +76,7 @@ export async function GET(request: Request) {
           color: row.color ? String(row.color) : undefined,
           iconName: row.icon_name ? String(row.icon_name) : undefined,
           isTaxable: Boolean(row.is_taxable ?? true),
+          discountPrice: Number(row.discount_price ?? 0),
         }));
 
         return NextResponse.json({
@@ -129,14 +132,15 @@ export async function POST(request: Request) {
       color: body.color || 'bg-emerald-500/10 text-emerald-600 border-emerald-200',
       iconName: body.iconName || 'Package',
       isTaxable: body.isTaxable !== false,
+      discountPrice: Number(body.discountPrice || 0),
     };
 
     // 1. Prisma ORM (via parameterized raw SQL for 100% robust array, brand, and image support)
     if (isPrismaConfigured()) {
       try {
         await prisma.$executeRawUnsafe(
-          `INSERT INTO products (id, barcode, name, category, price, cost_price, stock, reorder_level, unit, brand, image, images, color, icon_name, is_taxable, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+          `INSERT INTO products (id, barcode, name, category, price, cost_price, stock, reorder_level, unit, brand, image, images, color, icon_name, is_taxable, discount_price, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
            ON CONFLICT (id) DO UPDATE SET
              barcode = EXCLUDED.barcode,
              name = EXCLUDED.name,
@@ -152,6 +156,7 @@ export async function POST(request: Request) {
              color = EXCLUDED.color,
              icon_name = EXCLUDED.icon_name,
              is_taxable = EXCLUDED.is_taxable,
+             discount_price = EXCLUDED.discount_price,
              updated_at = NOW()`,
           newProduct.id,
           newProduct.barcode,
@@ -167,7 +172,8 @@ export async function POST(request: Request) {
           newProduct.images || [],
           newProduct.color || null,
           newProduct.iconName || null,
-          newProduct.isTaxable
+          newProduct.isTaxable,
+          newProduct.discountPrice || 0
         );
 
         return NextResponse.json({
@@ -202,6 +208,7 @@ export async function POST(request: Request) {
             color: newProduct.color,
             icon_name: newProduct.iconName,
             is_taxable: newProduct.isTaxable,
+            discount_price: newProduct.discountPrice || 0,
           },
         ]);
 

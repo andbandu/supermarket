@@ -6,6 +6,8 @@ import { ToastProvider } from '@/context/ToastContext';
 import Navbar from '@/components/Navbar';
 import POSView from '@/components/POSView';
 import InventoryView from '@/components/InventoryView';
+import BrandCategoryView from '@/components/BrandCategoryView';
+import DiscountView from '@/components/DiscountView';
 import HistoryView from '@/components/HistoryView';
 import ShiftReportView from '@/components/ShiftReportView';
 import SettingsView from '@/components/SettingsView';
@@ -81,6 +83,10 @@ function POSMainApp() {
         )}
 
         {activeTab === 'inventory' && <InventoryView />}
+
+        {activeTab === 'catalog' && <BrandCategoryView />}
+
+        {activeTab === 'discounts' && <DiscountView />}
 
         {activeTab === 'history' && (
           <HistoryView

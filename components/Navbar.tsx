@@ -8,6 +8,8 @@ import {
   Store,
   ShoppingCart,
   Boxes,
+  Layers,
+  BadgePercent,
   Receipt,
   BarChart3,
   Settings as SettingsIcon,
@@ -167,6 +169,36 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
                 {lowStockCount}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setActiveTab('catalog');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'catalog'
+                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Brands & Categories</span>
+          </button>
+
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setActiveTab('discounts');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'discounts'
+                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <BadgePercent className="w-4 h-4" />
+            <span>Discounts</span>
           </button>
 
           <button

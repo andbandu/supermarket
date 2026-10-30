@@ -23,7 +23,7 @@ interface PaymentModalProps {
 }
 
 export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
-  const { cartTotal, settings, processPayment, formatPrice } = usePOS();
+  const { cartTotal, cartGrossSubtotal, cartTotalDiscount, settings, processPayment, formatPrice } = usePOS();
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [tenderedStr, setTenderedStr] = useState<string>('');
@@ -113,9 +113,16 @@ export default function PaymentModal({ isOpen, onClose }: PaymentModalProps) {
 
         {/* Total Banner */}
         <div className="bg-slate-950/60 p-4 border-b border-slate-800/80 flex items-center justify-between">
-          <span className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-            Amount Due
-          </span>
+          <div>
+            <span className="text-sm font-semibold uppercase tracking-wider text-slate-400 block">
+              Amount Due
+            </span>
+            {cartTotalDiscount > 0 && (
+              <span className="text-[11px] text-slate-500 font-mono">
+                Gross: {formatPrice(cartGrossSubtotal)} (Save {formatPrice(cartTotalDiscount)})
+              </span>
+            )}
+          </div>
           <span className="text-3xl font-black text-emerald-400 font-mono tracking-tight">
             {formatPrice(cartTotal)}
           </span>

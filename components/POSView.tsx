@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { usePOS } from '@/context/POSContext';
 import { Product, ProductCategory } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
@@ -36,6 +36,12 @@ import {
   Cable,
   AlertTriangle,
   RotateCcw,
+  Ticket,
+  Tag,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  X,
 } from 'lucide-react';
 
 const CATEGORIES: ProductCategory[] = [
@@ -100,6 +106,10 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
     removeFromCart,
     setItemDiscount,
     clearCart,
+    cartGrossSubtotal,
+    cartLineDiscount,
+    cartOrderDiscount,
+    cartTotalDiscount,
     cartSubtotal,
     cartTax,
     cartTotal,
@@ -110,14 +120,30 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
     holdCurrentCart,
     heldOrders,
     isLoading,
+    discounts,
+    categories: registeredCategories,
+    appliedDiscount,
+    applyDiscountRule,
+    applyDiscountByCode,
+    removeAppliedDiscount,
   } = usePOS();
 
   const [barcodeInput, setBarcodeInput] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('All');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+
+  const availableCategories = useMemo(() => {
+    if (registeredCategories && registeredCategories.length > 0) {
+      const activeCats = registeredCategories.filter((c) => c.isActive).map((c) => c.name);
+      return ['All', ...activeCats];
+    }
+    return CATEGORIES;
+  }, [registeredCategories]);
   const [searchQuery, setSearchQuery] = useState('');
   const [discountingItemId, setDiscountingItemId] = useState<string | null>(null);
   const [discountValue, setDiscountValue] = useState<string>('10');
   const [isOpenItemModalOpen, setIsOpenItemModalOpen] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [showPromoList, setShowPromoList] = useState(false);
 
   // Fast Barcode Scanner input ref
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -157,6 +183,23 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
       setItemDiscount(productId, num);
     }
     setDiscountingItemId(null);
+  };
+
+  const handleCouponSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!couponInput.trim()) return;
+    if (cart.length === 0) {
+      toast.warning('Please add items to cart before applying coupon.', 'Cart Empty');
+      return;
+    }
+    const res = applyDiscountByCode(couponInput.trim());
+    if (res.success) {
+      toast.success(res.message || 'Promotion applied successfully!', 'Promo Applied');
+      setCouponInput('');
+      setShowPromoList(false);
+    } else {
+      toast.warning(res.message || 'Invalid promotion code', 'Promo Notice');
+    }
   };
 
   const handleHoldOrder = () => {
@@ -229,7 +272,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
 
         {/* Categories Bar */}
         <div className="px-3 py-2 bg-slate-900/50 border-b border-slate-800/80 overflow-x-auto flex items-center gap-1.5 scrollbar-thin">
-          {CATEGORIES.map((cat) => {
+          {availableCategories.map((cat: string) => {
             const count =
               cat === 'All'
                 ? products.length
@@ -315,6 +358,16 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                 const isLowStock = product.stock > 0 && product.stock <= product.reorderLevel;
                 const inCartItem = cart.find((i) => i.product.id === product.id);
 
+                const itemDiscountRule = discounts.find(
+                  (d) => d.isActive && d.scope === 'PRODUCT' && d.targetProductId === product.id
+                );
+                const effectiveDiscountPrice =
+                  product.discountPrice && product.discountPrice > 0 && product.discountPrice < product.price
+                    ? product.discountPrice
+                    : itemDiscountRule && itemDiscountRule.value > 0 && itemDiscountRule.value < product.price
+                    ? itemDiscountRule.value
+                    : undefined;
+
                 return (
                   <button
                     key={product.id}
@@ -328,7 +381,7 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                   >
                     {/* In Cart quantity badge */}
                     {inCartItem && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-slate-950 font-black text-[11px] px-2 py-0.5 rounded-full shadow-md shadow-emerald-500/30">
+                      <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-slate-950 font-black text-[11px] px-2 py-0.5 rounded-full shadow-md shadow-emerald-500/30 z-10">
                         {inCartItem.quantity}
                       </span>
                     )}
@@ -388,9 +441,20 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
 
                     {/* Price & Add Indicator */}
                     <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                      <span className="font-bold text-sm text-emerald-400 font-mono">
-                        {formatPrice(product.price)}
-                      </span>
+                      {effectiveDiscountPrice !== undefined ? (
+                        <div>
+                          <span className="text-[10px] text-slate-500 line-through font-mono block leading-none">
+                            {formatPrice(product.price)}
+                          </span>
+                          <span className="font-bold text-sm text-emerald-400 font-mono">
+                            {formatPrice(effectiveDiscountPrice)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-bold text-sm text-emerald-400 font-mono">
+                          {formatPrice(product.price)}
+                        </span>
+                      )}
                       <div className="w-6 h-6 rounded-md bg-slate-800 group-hover:bg-emerald-600 flex items-center justify-center text-slate-300 group-hover:text-white transition">
                         <Plus className="w-3.5 h-3.5" />
                       </div>
@@ -467,7 +531,11 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
           ) : (
             cart.map((item) => {
               const unitPrice = item.customPrice ?? item.product.price;
-              const lineTotal = unitPrice * (1 - item.discountPercent / 100) * item.quantity;
+              const hasNativePrice = item.discountPrice !== undefined && item.discountPrice > 0;
+              const effectiveUnit = hasNativePrice
+                ? item.discountPrice!
+                : unitPrice * (1 - item.discountPercent / 100);
+              const lineTotal = effectiveUnit * item.quantity;
 
               return (
                 <div
@@ -480,13 +548,27 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
                         {item.product.name}
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
-                        <span>
-                          {formatPrice(unitPrice)}
-                        </span>
-                        {item.discountPercent > 0 && (
-                          <span className="text-amber-400 font-semibold">
-                            (-{item.discountPercent}%)
-                          </span>
+                        {hasNativePrice ? (
+                          <>
+                            <span className="line-through text-slate-500">
+                              {formatPrice(unitPrice)}
+                            </span>
+                            <span className="text-emerald-400 font-bold">
+                              {formatPrice(item.discountPrice!)}
+                            </span>
+                            <span className="text-cyan-400 font-semibold text-[10px]">
+                              (Save {formatPrice(unitPrice - item.discountPrice!)})
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span>{formatPrice(unitPrice)}</span>
+                            {item.discountPercent > 0 && (
+                              <span className="text-amber-400 font-semibold">
+                                (-{item.discountPercent}%)
+                              </span>
+                            )}
+                          </>
                         )}
                         {!item.product.isTaxable && (
                           <span className="text-sky-400 text-[10px]">No Tax</span>
@@ -594,15 +676,175 @@ export default function POSView({ onOpenHeldOrders }: { onOpenHeldOrders: () => 
           )}
         </div>
 
+        {/* Promotion & Coupon Application Bar */}
+        <div className="px-3 py-2.5 bg-slate-900 border-t border-slate-800">
+          {appliedDiscount ? (
+            <div className="flex items-center justify-between p-2 rounded-xl bg-gradient-to-r from-emerald-500/15 to-teal-500/10 border border-emerald-500/30">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Tag className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-emerald-300 truncate">
+                      {appliedDiscount.name}
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded font-bold border border-emerald-500/30">
+                      {appliedDiscount.code}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    {appliedDiscount.type === 'PERCENTAGE' && `${appliedDiscount.value}% off order`}
+                    {appliedDiscount.type === 'FIXED_AMOUNT' && `${formatPrice(appliedDiscount.value)} off voucher`}
+                    {appliedDiscount.type === 'CATEGORY_PERCENT' && `${appliedDiscount.value}% off ${appliedDiscount.targetCategory}`}
+                    {appliedDiscount.minOrderAmount ? ` (Min: ${formatPrice(appliedDiscount.minOrderAmount)})` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0 ml-2">
+                <span className="text-xs font-bold font-mono text-emerald-400">
+                  -{formatPrice(cartOrderDiscount)}
+                </span>
+                <button
+                  onClick={removeAppliedDiscount}
+                  className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                  title="Remove Discount"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Ticket className="w-3.5 h-3.5 text-amber-400" />
+                  Have a Promo / Coupon?
+                </span>
+                {discounts.filter((d) => d.isActive).length > 0 && (
+                  <button
+                    onClick={() => setShowPromoList(!showPromoList)}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-0.5 font-medium transition"
+                  >
+                    <span>{showPromoList ? 'Hide Deals' : `View Deals (${discounts.filter((d) => d.isActive).length})`}</span>
+                    {showPromoList ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                )}
+              </div>
+
+              {/* Coupon Code input form */}
+              <form onSubmit={handleCouponSubmit} className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="Enter promo code (e.g. WEEKEND10)"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    className="w-full bg-slate-950 text-white pl-2.5 pr-2 py-1.5 rounded-lg border border-slate-700/80 focus:border-amber-400 text-xs font-mono uppercase placeholder:normal-case placeholder:text-slate-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!couponInput.trim() || cart.length === 0}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-xs transition"
+                >
+                  Apply
+                </button>
+              </form>
+
+              {/* Collapsible active promotions quick selection chips */}
+              {showPromoList && (
+                <div className="pt-1.5 space-y-1.5 max-h-36 overflow-y-auto">
+                  {discounts
+                    .filter((d) => d.isActive)
+                    .map((disc) => {
+                      const meetsMin = !disc.minOrderAmount || cartGrossSubtotal >= disc.minOrderAmount;
+                      return (
+                        <div
+                          key={disc.id}
+                          onClick={() => {
+                            if (cart.length === 0) {
+                              toast.info('Add items to cart first to apply promotion', 'Cart Empty');
+                              return;
+                            }
+                            const res = applyDiscountRule(disc);
+                            if (res.success) {
+                              toast.success(res.message || `Applied ${disc.name}`, 'Promotion Applied');
+                              setShowPromoList(false);
+                            } else {
+                              toast.warning(res.message || 'Cannot apply promotion', 'Notice');
+                            }
+                          }}
+                          className={`p-1.5 rounded-lg border text-xs flex items-center justify-between cursor-pointer transition ${
+                            meetsMin && cart.length > 0
+                              ? 'bg-slate-800/80 hover:bg-slate-800 hover:border-amber-500/50 border-slate-700/80 text-slate-200'
+                              : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold truncate text-[11px] text-white">
+                                {disc.name}
+                              </span>
+                              <span className="font-mono text-[9px] px-1 py-0.5 bg-amber-500/20 text-amber-300 rounded font-bold">
+                                {disc.code}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                              {disc.type === 'PERCENTAGE' && `${disc.value}% off`}
+                              {disc.type === 'FIXED_AMOUNT' && `${formatPrice(disc.value)} off`}
+                              {disc.type === 'CATEGORY_PERCENT' && `${disc.value}% off ${disc.targetCategory}`}
+                              {disc.minOrderAmount ? ` • Min ${formatPrice(disc.minOrderAmount)}` : ''}
+                            </p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                            Apply
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Cart Financial Summary & Checkout Action */}
         <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-3">
           <div className="space-y-1.5 text-xs">
+            {/* Gross Amount */}
             <div className="flex justify-between text-slate-400">
-              <span>Subtotal</span>
-              <span className="font-mono text-slate-200">
-                {formatPrice(cartSubtotal)}
+              <span>Gross Amount</span>
+              <span className="font-mono text-slate-300">
+                {formatPrice(cartGrossSubtotal)}
               </span>
             </div>
+
+            {/* Total Savings badge */}
+            {cartTotalDiscount > 0 && (
+              <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3 h-3" />
+                  <span>
+                    Total Savings
+                    {appliedDiscount ? ` (${appliedDiscount.code})` : ''}
+                  </span>
+                </span>
+                <span className="font-mono">
+                  -{formatPrice(cartTotalDiscount)}
+                </span>
+              </div>
+            )}
+
+            {cartTotalDiscount > 0 && (
+              <div className="flex justify-between text-slate-400">
+                <span>Net Subtotal</span>
+                <span className="font-mono text-slate-200">
+                  {formatPrice(cartSubtotal)}
+                </span>
+              </div>
+            )}
 
             <div className="flex justify-between text-slate-400">
               <span className="flex items-center gap-1">

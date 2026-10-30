@@ -24,6 +24,7 @@ export interface Product {
   iconName?: string;
   color?: string;
   isTaxable: boolean;
+  discountPrice?: number; // Native individual item discounted selling price (LKR)
 }
 
 export const PRODUCT_UNITS = [
@@ -47,6 +48,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   discountPercent: number; // 0 to 100
+  discountPrice?: number; // Discounted unit selling price (LKR)
   customPrice?: number;
 }
 
@@ -67,6 +69,7 @@ export interface Order {
   receiptNumber: string;
   timestamp: string; // ISO string
   items: OrderItem[];
+  grossAmount?: number; // Gross amount before any discounts
   subtotal: number;
   discountAmount: number;
   taxAmount: number;
@@ -77,7 +80,33 @@ export interface Order {
   cashierName: string;
   status: 'COMPLETED' | 'REFUNDED' | 'HELD';
   refundReason?: string;
+  appliedDiscountId?: string;
+  appliedDiscountName?: string;
+  appliedDiscountCode?: string;
   notes?: string;
+}
+
+export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT' | 'CATEGORY_PERCENT' | 'PRODUCT_DISCOUNT_PRICE';
+export type DiscountScope = 'ORDER' | 'CATEGORY' | 'PRODUCT';
+
+export interface Discount {
+  id: string;
+  name: string;
+  code?: string;
+  type: DiscountType;
+  value: number;
+  scope: DiscountScope;
+  targetCategory?: ProductCategory;
+  targetProductId?: string;
+  targetProductName?: string;
+  minOrderAmount?: number;
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
+  usageCount: number;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface HeldOrder {
@@ -113,4 +142,31 @@ export interface POSSettings {
   soundEnabled: boolean;
   activeCashier: string;
 }
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  iconName?: string;
+  color?: string;
+  isActive: boolean;
+  productCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  origin?: string;
+  logo?: string;
+  isActive: boolean;
+  productCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 

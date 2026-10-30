@@ -31,11 +31,14 @@ export async function GET(request: Request) {
           totalPrice: item.totalPrice,
         }));
 
+        const grossAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+
         return {
           id: o.id,
           receiptNumber: o.receiptNumber,
           timestamp: o.timestamp.toISOString(),
           items,
+          grossAmount: Number(grossAmount.toFixed(2)),
           subtotal: o.subtotal,
           discountAmount: o.discountAmount,
           taxAmount: o.taxAmount,
@@ -82,11 +85,14 @@ export async function GET(request: Request) {
             totalPrice: Number(item.total_price),
           }));
 
+          const grossAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+
           return {
             id: String(o.id),
             receiptNumber: String(o.receipt_number),
             timestamp: String(o.timestamp),
             items,
+            grossAmount: Number(grossAmount.toFixed(2)),
             subtotal: Number(o.subtotal),
             discountAmount: Number(o.discount_amount || 0),
             taxAmount: Number(o.tax_amount || 0),
@@ -144,12 +150,18 @@ export async function POST(request: Request) {
     const changeGiven = Number(body.changeGiven || 0);
     const cashierName = body.cashierName || 'Cashier';
     const notes = body.notes;
+    const grossAmount = Number(
+      body.grossAmount ||
+      items.reduce((sum, item) => sum + (item.quantity || 1) * (item.unitPrice || 0), 0) ||
+      subtotal
+    );
 
     const completedOrder: Order = {
       id: orderId,
       receiptNumber,
       timestamp: body.timestamp || new Date().toISOString(),
       items,
+      grossAmount,
       subtotal,
       discountAmount,
       taxAmount,

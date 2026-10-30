@@ -27,6 +27,7 @@ model Product {
   color        String?
   iconName     String?     @map("icon_name")
   isTaxable    Boolean     @default(true) @map("is_taxable")
+  discountPrice Float?     @default(0.0) @map("discount_price")
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
@@ -115,4 +116,55 @@ model Settings {
 
   @@map("settings")
 }
+
+model Discount {
+  id             String    @id
+  name           String
+  code           String?   @unique
+  type           String
+  value          Float
+  scope          String    @default("ORDER")
+  targetCategory String?   @map("target_category")
+  targetProductId String?  @map("target_product_id")
+  targetProductName String? @map("target_product_name")
+  minOrderAmount Float     @default(0.0) @map("min_order_amount")
+  startDate      DateTime? @default(now()) @map("start_date")
+  endDate        DateTime? @map("end_date")
+  isActive       Boolean   @default(true) @map("is_active")
+  usageCount     Int       @default(0) @map("usage_count")
+  description    String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("discounts")
+}
+
+model Category {
+  id          String   @id
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  iconName    String?  @default("Package") @map("icon_name")
+  color       String?  @default("bg-emerald-500/10 text-emerald-400 border-emerald-500/30")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("categories")
+}
+
+model Brand {
+  id          String   @id
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  origin      String?  @default("Sri Lanka")
+  logo        String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("brands")
+}
+
 
