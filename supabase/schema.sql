@@ -37,7 +37,29 @@ alter table products add column if not exists discount_price numeric(10, 2) defa
 create index if not exists idx_products_barcode on products (barcode);
 create index if not exists idx_products_category on products (category);
 
--- 3. ORDERS TABLE
+-- 2.5 ONLINE CUSTOMERS TABLE
+create table if not exists online_customers (
+    id text primary key,
+    name text not null,
+    phone text unique not null,
+    email text,
+    address text,
+    city text,
+    default_address text,
+    total_orders integer default 0,
+    total_spent numeric(10, 2) default 0.00,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+alter table online_customers add column if not exists address text;
+alter table online_customers add column if not exists city text;
+alter table online_customers add column if not exists default_address text;
+
+create index if not exists idx_online_customers_phone on online_customers (phone);
+create index if not exists idx_online_customers_city on online_customers (city);
+
+-- 3. ORDERS TABLE (Unified POS and Online Orders)
 create table if not exists orders (
     id text primary key,
     receipt_number text unique not null,
@@ -46,18 +68,51 @@ create table if not exists orders (
     discount_amount numeric(10, 2) not null default 0.00,
     tax_amount numeric(10, 2) not null default 0.00,
     total numeric(10, 2) not null,
-    payment_method text not null check (payment_method in ('CASH', 'CARD', 'QR', 'SPLIT')),
+    payment_method text not null,
     amount_tendered numeric(10, 2) not null,
     change_given numeric(10, 2) not null default 0.00,
     cashier_name text not null,
-    status text not null default 'COMPLETED' check (status in ('COMPLETED', 'REFUNDED')),
+    status text not null default 'COMPLETED',
     refund_reason text,
     notes text,
-    created_at timestamptz default now()
+    gross_amount numeric(10, 2) default 0.00,
+    order_source text not null default 'POS',
+    order_type text not null default 'IN_STORE',
+    fulfillment_status text not null default 'COMPLETED',
+    customer_id text references online_customers(id) on delete set null,
+    delivery_address text,
+    delivery_city text,
+    delivery_fee numeric(10, 2) default 0.00,
+    payment_status text not null default 'PAID',
+    estimated_time text,
+    customer_notes text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
 );
+
+-- Migrations for existing deployments
+alter table orders add column if not exists gross_amount numeric(10, 2) default 0.00;
+alter table orders add column if not exists order_source text not null default 'POS';
+alter table orders add column if not exists order_type text not null default 'IN_STORE';
+alter table orders add column if not exists fulfillment_status text not null default 'COMPLETED';
+alter table orders add column if not exists customer_id text references online_customers(id) on delete set null;
+alter table orders drop column if exists customer_name;
+alter table orders drop column if exists customer_phone;
+alter table orders drop column if exists customer_email;
+alter table orders add column if not exists delivery_address text;
+alter table orders add column if not exists delivery_city text;
+alter table orders add column if not exists delivery_fee numeric(10, 2) default 0.00;
+alter table orders add column if not exists payment_status text not null default 'PAID';
+alter table orders add column if not exists estimated_time text;
+alter table orders add column if not exists customer_notes text;
+alter table orders add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists idx_orders_receipt on orders (receipt_number);
 create index if not exists idx_orders_timestamp on orders (timestamp desc);
+create index if not exists idx_orders_order_source on orders (order_source);
+create index if not exists idx_orders_fulfillment_status on orders (fulfillment_status);
+create index if not exists idx_orders_customer_id on orders (customer_id);
+create index if not exists idx_orders_delivery_city on orders (delivery_city);
 
 -- 4. ORDER ITEMS TABLE (Relational order breakdown)
 create table if not exists order_items (

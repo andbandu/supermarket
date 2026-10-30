@@ -28,7 +28,7 @@ interface HistoryViewProps {
 }
 
 export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
-  const { orders, refundOrder, settings, refreshFromApi, formatPrice, isLoading } = usePOS();
+  const { posOrders, refundOrder, settings, refreshFromApi, formatPrice, isLoading } = usePOS();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'COMPLETED' | 'REFUNDED'>('ALL');
@@ -37,20 +37,20 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
   const [orderToRefund, setOrderToRefund] = useState<Order | null>(null);
   const [refundReason, setRefundReason] = useState('Customer return / damaged item');
 
-  // Metrics
-  const totalSalesRevenue = orders
+  // Metrics (Strictly In-Store POS Register Transactions)
+  const totalSalesRevenue = posOrders
     .filter((o) => o.status === 'COMPLETED')
     .reduce((sum, o) => sum + o.total, 0);
 
-  const totalRefundedRevenue = orders
+  const totalRefundedRevenue = posOrders
     .filter((o) => o.status === 'REFUNDED')
     .reduce((sum, o) => sum + o.total, 0);
 
-  const completedCount = orders.filter((o) => o.status === 'COMPLETED').length;
-  const refundedCount = orders.filter((o) => o.status === 'REFUNDED').length;
+  const completedCount = posOrders.filter((o) => o.status === 'COMPLETED').length;
+  const refundedCount = posOrders.filter((o) => o.status === 'REFUNDED').length;
 
-  // Filter orders
-  const filteredOrders = orders.filter((order) => {
+  // Filter orders (Only POS in-store orders)
+  const filteredOrders = posOrders.filter((order) => {
     const matchesSearch =
       order.receiptNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.cashierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -93,7 +93,7 @@ export default function HistoryView({ onViewReceipt }: HistoryViewProps) {
   const handleExportHistory = () => {
     soundManager.playClick();
     const headers = ['ReceiptNumber,Date,Time,Status,PaymentMethod,Subtotal,Tax,Total,Cashier\n'];
-    const rows = orders.map((o) => {
+    const rows = posOrders.map((o) => {
       const d = new Date(o.timestamp);
       return `"${o.receiptNumber}","${d.toLocaleDateString()}","${d.toLocaleTimeString()}","${o.status}","${o.paymentMethod}",${o.subtotal},${o.taxAmount},${o.total},"${o.cashierName}"`;
     });

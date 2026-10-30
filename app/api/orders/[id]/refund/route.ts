@@ -22,7 +22,12 @@ export async function POST(
         where: {
           OR: [{ id: id }, { receiptNumber: id }],
         },
-        include: { items: true },
+        select: {
+          id: true,
+          receiptNumber: true,
+          status: true,
+          items: true,
+        },
       });
 
       if (order) {

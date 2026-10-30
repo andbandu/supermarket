@@ -898,7 +898,7 @@ export default function InventoryView() {
                       }}
                       className="w-full bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg focus:border-emerald-500 text-xs font-medium"
                     >
-                      <option value="">-- Select Brand from Database (or None) --</option>
+                      <option value="">-- Select Brand (or None) --</option>
                       {brandOptions.map((b) => (
                         <option key={b} value={b}>
                           {b}

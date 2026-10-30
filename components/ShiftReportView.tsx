@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export default function ShiftReportView() {
-  const { shift, orders, settings, performCashDrop, closeShift, startNewShift, formatPrice, isLoading } = usePOS();
+  const { shift, posOrders, settings, performCashDrop, closeShift, startNewShift, formatPrice, isLoading } = usePOS();
 
   const [actualDrawerCount, setActualDrawerCount] = useState<string>('');
   const [cashDropAmount, setCashDropAmount] = useState<string>('');
@@ -30,8 +30,8 @@ export default function ShiftReportView() {
   const [newCashierName, setNewCashierName] = useState('Kasun Perera (Cashier #01)');
   const [newStartingFloat, setNewStartingFloat] = useState('5000.00');
 
-  // Filter orders created during this shift
-  const shiftOrders = orders.filter(
+  // Filter in-store POS orders created during this shift
+  const shiftOrders = posOrders.filter(
     (o) => new Date(o.timestamp) >= new Date(shift.startedAt)
   );
 

@@ -82,6 +82,35 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
               </div>
             </div>
 
+            {/* Online Order Details (if applicable) */}
+            {order.orderSource && order.orderSource !== 'POS' && (
+              <div className="py-2 border-b border-dashed border-zinc-400 text-[10px] space-y-0.5">
+                <div className="flex justify-between">
+                  <span>Channel:</span>
+                  <span className="font-bold">{order.orderSource} ({order.orderType})</span>
+                </div>
+                {order.customerName && (
+                  <div className="flex justify-between">
+                    <span>Customer:</span>
+                    <span className="font-semibold">{order.customerName}</span>
+                  </div>
+                )}
+                {order.customerPhone && (
+                  <div className="flex justify-between">
+                    <span>Phone:</span>
+                    <span>{order.customerPhone}</span>
+                  </div>
+                )}
+                {(order.deliveryAddress || order.deliveryCity) && (
+                  <div className="text-[9px] text-zinc-600 mt-0.5">
+                    <span>
+                      Delivery: {[order.deliveryAddress, order.deliveryCity].filter(Boolean).join(', ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Items Table */}
             <div className="py-2.5 border-b border-dashed border-zinc-400">
               <div className="flex justify-between font-bold pb-1 text-[11px]">
@@ -135,6 +164,13 @@ export default function ReceiptModal({ isOpen, onClose }: ReceiptModalProps) {
                     <span>{formatPrice(order.subtotal)}</span>
                   </div>
                 </>
+              )}
+
+              {order.deliveryFee != null && order.deliveryFee > 0 && (
+                <div className="flex justify-between text-zinc-700">
+                  <span>Delivery Fee:</span>
+                  <span>{formatPrice(order.deliveryFee)}</span>
+                </div>
               )}
 
               {(settings.taxRatePercent > 0 || order.taxAmount > 0) && (

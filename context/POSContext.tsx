@@ -13,6 +13,9 @@ import {
   Discount,
   Category,
   Brand,
+  OnlineCustomer,
+  FulfillmentStatus,
+  OrderPaymentStatus,
 } from '@/types/pos';
 import { soundManager } from '@/lib/sound';
 import { apiClient } from '@/lib/apiClient';
@@ -26,12 +29,18 @@ interface POSContextType {
   cart: CartItem[];
   heldOrders: HeldOrder[];
   orders: Order[];
+  onlineOrders: Order[];
+  posOrders: Order[];
+  pendingOnlineOrdersCount: number;
+  customers: OnlineCustomer[];
   discounts: Discount[];
   appliedDiscount: Discount | null;
   settings: POSSettings;
   shift: CashierShift;
-  activeTab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'history' | 'shift' | 'settings';
-  setActiveTab: (tab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'history' | 'shift' | 'settings') => void;
+  activeTab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'orders' | 'customers' | 'history' | 'shift' | 'settings';
+  setActiveTab: (tab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'orders' | 'customers' | 'history' | 'shift' | 'settings') => void;
+  selectedCustomerIdForView: string | null;
+  setSelectedCustomerIdForView: (id: string | null) => void;
   isPaymentModalOpen: boolean;
   setIsPaymentModalOpen: (open: boolean) => void;
   lastCompletedOrder: Order | null;
@@ -73,6 +82,21 @@ interface POSContextType {
   createBrand: (brand: Omit<Brand, 'id' | 'productCount' | 'createdAt' | 'updatedAt'> & { id?: string }) => Promise<boolean>;
   updateBrand: (id: string, brand: Partial<Brand>) => Promise<boolean>;
   deleteBrand: (id: string) => Promise<boolean>;
+
+  // Online Orders & Customers Fulfillment Actions
+  updateFulfillmentStatus: (
+    orderId: string,
+    status: FulfillmentStatus,
+    estimatedTime?: string,
+    notes?: string
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
+  updatePaymentStatus: (
+    orderId: string,
+    status: OrderPaymentStatus
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
+  saveCustomer: (
+    customer: Partial<OnlineCustomer>
+  ) => Promise<{ success: boolean; message?: string; error?: string; data?: OnlineCustomer }>;
 
   // Calculations
   cartGrossSubtotal: number;
@@ -142,10 +166,12 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<OnlineCustomer[]>([]);
   const [shift, setShift] = useState<CashierShift>(EMPTY_SHIFT);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'catalog' | 'discounts' | 'history' | 'shift' | 'settings'>('pos');
+  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'catalog' | 'discounts' | 'orders' | 'customers' | 'history' | 'shift' | 'settings'>('pos');
+  const [selectedCustomerIdForView, setSelectedCustomerIdForView] = useState<string | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -185,10 +211,29 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         setProducts(prodRes.data);
       }
 
-      // 3. Fetch live orders from PostgreSQL (reflects live database state immediately)
+      // 3. Fetch live orders from PostgreSQL
       const ordersRes = await apiClient.getOrders();
       if (ordersRes && ordersRes.success && Array.isArray(ordersRes.data)) {
-        setOrders(ordersRes.data);
+        setOrders((prev) => {
+          // Check for newly arrived pending online orders
+          const prevPendingIds = new Set(
+            prev.filter((o) => o.orderSource && o.orderSource !== 'POS' && o.fulfillmentStatus === 'PENDING').map((o) => o.id)
+          );
+          const newPending = ordersRes.data.filter(
+            (o) => o.orderSource && o.orderSource !== 'POS' && o.fulfillmentStatus === 'PENDING' && !prevPendingIds.has(o.id)
+          );
+          if (newPending.length > 0 && prev.length > 0) {
+            soundManager.playOrderAlert();
+            toast.info(`🔔 ${newPending.length} new online order(s) arrived!`, 'New Incoming Order');
+          }
+          return ordersRes.data;
+        });
+      }
+
+      // 3.1 Fetch live online customers from PostgreSQL
+      const custRes = await apiClient.getCustomers();
+      if (custRes && custRes.success && Array.isArray(custRes.data)) {
+        setCustomers(custRes.data);
       }
 
       // 4. Fetch live held orders from PostgreSQL
@@ -234,6 +279,14 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
       setIsHydrated(true);
     }
   }, []);
+
+  // Periodic polling for new online orders (every 30 seconds)
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      refreshFromApi();
+    }, 30000);
+    return () => clearInterval(pollInterval);
+  }, [refreshFromApi]);
 
   // On client mount: purge old localStorage and sync real-time state from database
   useEffect(() => {
@@ -335,6 +388,19 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
   const cartItemCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
+
+  // Online and POS Orders classification
+  const onlineOrders = useMemo(() => {
+    return orders.filter((o) => o.orderSource && o.orderSource !== 'POS');
+  }, [orders]);
+
+  const posOrders = useMemo(() => {
+    return orders.filter((o) => !o.orderSource || o.orderSource === 'POS');
+  }, [orders]);
+
+  const pendingOnlineOrdersCount = useMemo(() => {
+    return onlineOrders.filter((o) => o.fulfillmentStatus === 'PENDING').length;
+  }, [onlineOrders]);
 
   const formatPrice = useCallback(
     (amount: number | string | undefined | null): string => {
@@ -978,6 +1044,80 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
     [refreshFromApi]
   );
 
+  // Online Orders & Fulfillment Actions
+  const updateFulfillmentStatus = useCallback(
+    async (
+      orderId: string,
+      status: FulfillmentStatus,
+      estimatedTime?: string,
+      notes?: string
+    ): Promise<{ success: boolean; message?: string; error?: string }> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.updateOrderStatus(orderId, status, estimatedTime, notes);
+        if (res.success) {
+          toast.success(`Order status updated to "${status}"`, 'Fulfillment Updated');
+          await refreshFromApi();
+          return { success: true, message: res.message };
+        } else {
+          toast.error(res.error || 'Failed to update order status', 'Database Error');
+          return { success: false, error: res.error };
+        }
+      } catch (err: any) {
+        toast.error('Network error updating order status', 'Connection Error');
+        return { success: false, error: err.message };
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const updatePaymentStatus = useCallback(
+    async (
+      orderId: string,
+      status: OrderPaymentStatus
+    ): Promise<{ success: boolean; message?: string; error?: string }> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.updatePaymentStatus(orderId, status);
+        if (res.success) {
+          toast.success(`Payment marked as ${status}`, 'Payment Status');
+          await refreshFromApi();
+          return { success: true, message: res.message };
+        } else {
+          toast.error(res.error || 'Failed to update payment status', 'Database Error');
+          return { success: false, error: res.error };
+        }
+      } catch (err: any) {
+        toast.error('Network error updating payment status', 'Connection Error');
+        return { success: false, error: err.message };
+      }
+    },
+    [refreshFromApi]
+  );
+
+  const saveCustomer = useCallback(
+    async (
+      customer: Partial<OnlineCustomer>
+    ): Promise<{ success: boolean; message?: string; error?: string; data?: OnlineCustomer }> => {
+      soundManager.playClick();
+      try {
+        const res = await apiClient.saveCustomer(customer);
+        if (res.success) {
+          toast.success('Customer profile saved successfully', 'Customer Saved');
+          await refreshFromApi();
+          return { success: true, data: res.data };
+        } else {
+          toast.error(res.error || 'Failed to save customer', 'Database Error');
+          return { success: false, error: res.error };
+        }
+      } catch (err: any) {
+        toast.error('Network error saving customer', 'Connection Error');
+        return { success: false, error: err.message };
+      }
+    },
+    [refreshFromApi]
+  );
+
   const addProduct = useCallback(
     async (newProd: Omit<Product, 'id'>) => {
       soundManager.playSuccess();
@@ -1114,12 +1254,18 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         cart,
         heldOrders,
         orders,
+        onlineOrders,
+        posOrders,
+        pendingOnlineOrdersCount,
+        customers,
         discounts,
         appliedDiscount,
         settings,
         shift,
         activeTab,
         setActiveTab,
+        selectedCustomerIdForView,
+        setSelectedCustomerIdForView,
         isPaymentModalOpen,
         setIsPaymentModalOpen,
         lastCompletedOrder,
@@ -1153,6 +1299,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         createBrand,
         updateBrand,
         deleteBrand,
+        updateFulfillmentStatus,
+        updatePaymentStatus,
+        saveCustomer,
         cartGrossSubtotal,
         cartLineDiscount,
         cartOrderDiscount,

@@ -1,4 +1,4 @@
-import { Product, Order, HeldOrder, CashierShift, POSSettings, PaymentMethod, Discount, Category, Brand } from '@/types/pos';
+import { Product, Order, HeldOrder, CashierShift, POSSettings, PaymentMethod, Discount, Category, Brand, OnlineCustomer } from '@/types/pos';
 
 const DEFAULT_API_KEY = 'minimart_pos_sec_key_2026';
 
@@ -16,6 +16,18 @@ class MinimartApiClient {
       'Content-Type': 'application/json',
       'x-api-key': this.apiKey,
     };
+  }
+
+  private async safeGet<T>(url: string, fallback: T): Promise<T> {
+    try {
+      const res = await fetch(url, {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) return fallback;
+      return await res.json();
+    } catch {
+      return fallback;
+    }
   }
 
   // Health check
@@ -50,10 +62,7 @@ class MinimartApiClient {
 
   // Products
   async getProducts(): Promise<{ success: boolean; data: Product[]; source: string }> {
-    const res = await fetch(`${this.baseUrl}/products`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/products`, { success: false, data: [], source: '' });
   }
 
   async createProduct(product: Omit<Product, 'id'>): Promise<{ success: boolean; data?: Product; error?: string }> {
@@ -114,36 +123,22 @@ class MinimartApiClient {
 
   // Orders
   async getOrders(): Promise<{ success: boolean; data: Order[]; source: string }> {
-    const res = await fetch(`${this.baseUrl}/orders`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/orders`, { success: false, data: [], source: '' });
   }
 
-  async createOrder(orderPayload: {
-    id?: string;
-    receiptNumber?: string;
-    timestamp?: string;
-    items: Array<{
-      productId: string;
-      productName: string;
-      barcode: string;
-      quantity: number;
-      unitPrice: number;
-      discountPercent: number;
-      totalPrice: number;
-    }>;
-    grossAmount?: number;
-    subtotal: number;
-    discountAmount: number;
-    taxAmount: number;
-    total: number;
-    paymentMethod: PaymentMethod;
-    amountTendered: number;
-    changeGiven: number;
-    cashierName: string;
-    notes?: string;
-  }): Promise<{ success: boolean; data: Order; error?: string }> {
+  async createOrder(
+    orderPayload: Partial<Order> & {
+      items: Array<{
+        productId: string;
+        productName: string;
+        barcode: string;
+        quantity: number;
+        unitPrice: number;
+        discountPercent: number;
+        totalPrice: number;
+      }>;
+    }
+  ): Promise<{ success: boolean; data: Order; error?: string }> {
     const res = await fetch(`${this.baseUrl}/orders`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -167,12 +162,54 @@ class MinimartApiClient {
     return res.json();
   }
 
-  // Held Orders
-  async getHeldOrders(): Promise<{ success: boolean; data: HeldOrder[] }> {
-    const res = await fetch(`${this.baseUrl}/held-orders`, {
+  async updateOrderStatus(
+    orderId: string,
+    fulfillmentStatus: string,
+    estimatedTime?: string,
+    notes?: string
+  ): Promise<{ success: boolean; message?: string; data?: Order; error?: string }> {
+    const res = await fetch(`${this.baseUrl}/orders/${encodeURIComponent(orderId)}`, {
+      method: 'PATCH',
       headers: this.getHeaders(),
+      body: JSON.stringify({ fulfillmentStatus, estimatedTime, notes }),
     });
     return res.json();
+  }
+
+  async updatePaymentStatus(
+    orderId: string,
+    paymentStatus: string
+  ): Promise<{ success: boolean; message?: string; data?: Order; error?: string }> {
+    const res = await fetch(`${this.baseUrl}/orders/${encodeURIComponent(orderId)}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ paymentStatus }),
+    });
+    return res.json();
+  }
+
+  // Online Customers
+  async getCustomers(query?: string): Promise<{ success: boolean; data: OnlineCustomer[] }> {
+    const url = query
+      ? `${this.baseUrl}/customers?q=${encodeURIComponent(query)}`
+      : `${this.baseUrl}/customers`;
+    return this.safeGet(url, { success: false, data: [] });
+  }
+
+  async saveCustomer(
+    customer: Partial<OnlineCustomer>
+  ): Promise<{ success: boolean; data?: OnlineCustomer; error?: string }> {
+    const res = await fetch(`${this.baseUrl}/customers`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(customer),
+    });
+    return res.json();
+  }
+
+  // Held Orders
+  async getHeldOrders(): Promise<{ success: boolean; data: HeldOrder[] }> {
+    return this.safeGet(`${this.baseUrl}/held-orders`, { success: false, data: [] });
   }
 
   async saveHeldOrder(heldOrder: HeldOrder): Promise<{ success: boolean; data: HeldOrder }> {
@@ -194,10 +231,7 @@ class MinimartApiClient {
 
   // Shift & Z-Report
   async getShift(): Promise<{ success: boolean; data: CashierShift }> {
-    const res = await fetch(`${this.baseUrl}/shifts`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/shifts`, { success: false, data: {} as CashierShift });
   }
 
   async saveShift(shift: CashierShift): Promise<{ success: boolean; data: CashierShift }> {
@@ -211,10 +245,7 @@ class MinimartApiClient {
 
   // Settings
   async getSettings(): Promise<{ success: boolean; data: POSSettings }> {
-    const res = await fetch(`${this.baseUrl}/settings`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/settings`, { success: false, data: {} as POSSettings });
   }
 
   async updateSettings(settings: Partial<POSSettings>): Promise<{ success: boolean; data: POSSettings }> {
@@ -228,10 +259,7 @@ class MinimartApiClient {
 
   // Discounts & Promotions Module
   async getDiscounts(): Promise<{ success: boolean; data: Discount[] }> {
-    const res = await fetch(`${this.baseUrl}/discounts`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/discounts`, { success: false, data: [] });
   }
 
   async createDiscount(
@@ -267,10 +295,7 @@ class MinimartApiClient {
 
   // Categories
   async getCategories(): Promise<{ success: boolean; data: Category[] }> {
-    const res = await fetch(`${this.baseUrl}/categories`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/categories`, { success: false, data: [] });
   }
 
   async createCategory(
@@ -306,10 +331,7 @@ class MinimartApiClient {
 
   // Brands
   async getBrands(): Promise<{ success: boolean; data: Brand[] }> {
-    const res = await fetch(`${this.baseUrl}/brands`, {
-      headers: this.getHeaders(),
-    });
-    return res.json();
+    return this.safeGet(`${this.baseUrl}/brands`, { success: false, data: [] });
   }
 
   async createBrand(

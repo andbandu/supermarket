@@ -54,6 +54,17 @@ export interface CartItem {
 
 export type PaymentMethod = 'CASH' | 'CARD' | 'QR' | 'SPLIT';
 
+export type OrderSource = 'POS' | 'STOREFRONT' | 'MOBILE_APP';
+export type OrderType = 'IN_STORE' | 'DELIVERY' | 'PICKUP';
+export type FulfillmentStatus =
+  | 'PENDING'
+  | 'PREPARING'
+  | 'READY'
+  | 'OUT_FOR_DELIVERY'
+  | 'COMPLETED'
+  | 'CANCELLED';
+export type OrderPaymentStatus = 'PAID' | 'UNPAID' | 'REFUNDED';
+
 export interface OrderItem {
   productId: string;
   productName: string;
@@ -84,6 +95,37 @@ export interface Order {
   appliedDiscountName?: string;
   appliedDiscountCode?: string;
   notes?: string;
+
+  // Unified Online Orders extensions
+  orderSource?: OrderSource;
+  orderType?: OrderType;
+  fulfillmentStatus?: FulfillmentStatus;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  deliveryAddress?: string;
+  deliveryCity?: string;
+  deliveryFee?: number;
+  paymentStatus?: OrderPaymentStatus;
+  estimatedTime?: string;
+  customerNotes?: string;
+  customer?: OnlineCustomer;
+  updatedAt?: string;
+}
+
+export interface OnlineCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  defaultAddress?: string;
+  totalOrders: number;
+  totalSpent: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT' | 'CATEGORY_PERCENT' | 'PRODUCT_DISCOUNT_PRICE';

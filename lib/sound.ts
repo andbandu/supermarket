@@ -161,6 +161,40 @@ class SoundManager {
       // Audio error
     }
   }
+
+  // Online order alert bell (door chime / bell notification)
+  playOrderAlert() {
+    if (!this.enabled) return;
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+
+      // Gentle, crisp dual chime (G5 784Hz -> C6 1046.5Hz)
+      osc1.frequency.setValueAtTime(783.99, now);
+      osc2.frequency.setValueAtTime(1046.5, now + 0.14);
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start(now);
+      osc2.start(now + 0.14);
+      osc1.stop(now + 0.6);
+      osc2.stop(now + 0.6);
+    } catch {
+      // Audio error
+    }
+  }
 }
 
 export const soundManager = new SoundManager();

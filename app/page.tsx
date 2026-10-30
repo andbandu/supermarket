@@ -8,7 +8,8 @@ import POSView from '@/components/POSView';
 import InventoryView from '@/components/InventoryView';
 import BrandCategoryView from '@/components/BrandCategoryView';
 import DiscountView from '@/components/DiscountView';
-import HistoryView from '@/components/HistoryView';
+import OrdersView from '@/components/OrdersView';
+import CustomerManagementView from '@/components/CustomerManagementView';
 import ShiftReportView from '@/components/ShiftReportView';
 import SettingsView from '@/components/SettingsView';
 import PaymentModal from '@/components/PaymentModal';
@@ -88,8 +89,17 @@ function POSMainApp() {
 
         {activeTab === 'discounts' && <DiscountView />}
 
-        {activeTab === 'history' && (
-          <HistoryView
+        {(activeTab === 'orders' || activeTab === 'history') && (
+          <OrdersView
+            onViewReceipt={(order) => {
+              setLastCompletedOrder(order);
+              setIsReceiptModalOpen(true);
+            }}
+          />
+        )}
+
+        {activeTab === 'customers' && (
+          <CustomerManagementView
             onViewReceipt={(order) => {
               setLastCompletedOrder(order);
               setIsReceiptModalOpen(true);

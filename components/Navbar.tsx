@@ -11,12 +11,14 @@ import {
   Layers,
   BadgePercent,
   Receipt,
+  ShoppingBag,
   BarChart3,
   Settings as SettingsIcon,
   Volume2,
   VolumeX,
   Clock,
   User,
+  Users,
   PauseCircle,
   KeyRound,
   Database,
@@ -37,6 +39,8 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
     cartItemCount,
     heldOrders,
     products,
+    customers,
+    pendingOnlineOrdersCount,
     isSupabaseLive,
     isSyncing,
     isLoading,
@@ -204,16 +208,41 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
           <button
             onClick={() => {
               soundManager.playClick();
-              setActiveTab('history');
+              setActiveTab('orders');
             }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'history'
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all relative ${
+              activeTab === 'orders' || activeTab === 'history'
                 ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <Receipt className="w-4 h-4" />
-            <span>History</span>
+            <ShoppingBag className="w-4 h-4" />
+            <span>Orders</span>
+            {pendingOnlineOrdersCount > 0 && (
+              <span className="bg-amber-400 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full animate-pulse shadow-sm shadow-amber-400/30">
+                {pendingOnlineOrdersCount} New
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              soundManager.playClick();
+              setActiveTab('customers');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all relative ${
+              activeTab === 'customers'
+                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Customers</span>
+            {customers && customers.length > 0 && (
+              <span className="bg-slate-800 text-slate-300 text-[10px] font-mono px-1.5 py-0.2 rounded-full">
+                {customers.length}
+              </span>
+            )}
           </button>
 
           <button

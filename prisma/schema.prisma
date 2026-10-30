@@ -37,25 +37,56 @@ model Product {
 }
 
 model Order {
-  id             String      @id
-  receiptNumber  String      @unique @map("receipt_number")
-  timestamp      DateTime    @default(now())
-  subtotal       Float
-  discountAmount Float       @default(0.0) @map("discount_amount")
-  taxAmount      Float       @default(0.0) @map("tax_amount")
-  total          Float
-  paymentMethod  String      @map("payment_method")
-  amountTendered Float       @map("amount_tendered")
-  changeGiven    Float       @default(0.0) @map("change_given")
-  cashierName    String      @map("cashier_name")
-  status         String      @default("COMPLETED")
-  refundReason   String?     @map("refund_reason")
-  notes          String?
-  createdAt      DateTime    @default(now()) @map("created_at")
+  id                String          @id
+  receiptNumber     String          @unique @map("receipt_number")
+  timestamp         DateTime        @default(now())
+  subtotal          Float
+  discountAmount    Float           @default(0.0) @map("discount_amount")
+  taxAmount         Float           @default(0.0) @map("tax_amount")
+  total             Float
+  paymentMethod     String          @map("payment_method")
+  amountTendered    Float           @map("amount_tendered")
+  changeGiven       Float           @default(0.0) @map("change_given")
+  cashierName       String          @map("cashier_name")
+  status            String          @default("COMPLETED")
+  refundReason      String?         @map("refund_reason")
+  notes             String?
+  grossAmount       Float?          @default(0.0) @map("gross_amount")
+  orderSource       String          @default("POS") @map("order_source")
+  orderType         String          @default("IN_STORE") @map("order_type")
+  fulfillmentStatus String          @default("COMPLETED") @map("fulfillment_status")
+  customerId        String?         @map("customer_id")
+  deliveryAddress   String?         @map("delivery_address")
+  deliveryCity      String?         @map("delivery_city")
+  deliveryFee       Float           @default(0.0) @map("delivery_fee")
+  paymentStatus     String          @default("PAID") @map("payment_status")
+  estimatedTime     String?         @map("estimated_time")
+  customerNotes     String?         @map("customer_notes")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at")
 
-  items          OrderItem[]
+  customer          OnlineCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
 
   @@map("orders")
+}
+
+model OnlineCustomer {
+  id             String    @id
+  name           String
+  phone          String    @unique
+  email          String?
+  address        String?   @map("address")
+  city           String?   @map("city")
+  defaultAddress String?   @map("default_address")
+  totalOrders    Int       @default(0) @map("total_orders")
+  totalSpent     Float     @default(0.0) @map("total_spent")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  orders         Order[]
+
+  @@map("online_customers")
 }
 
 model OrderItem {
