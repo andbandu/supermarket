@@ -1,47 +1,397 @@
 @import "tailwindcss";
 
+/* ========================================================================= */
+/* ERGONOMIC INDUSTRY-RECOMMENDED RETAIL COLOR THEME SYSTEM                 */
+/* Designed to prevent Computer Vision Syndrome (CVS), asthenopia, halation */
+/* and pupil dilation fatigue during 8-12 hour store checkout shifts.       */
+/* ========================================================================= */
+
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  /* Retail Clean Light Mode (Standard Store Daylight Standard) */
+  --pos-bg-app: #f1f5f9;            /* Soft matte cool slate - eliminates glare */
+  --pos-bg-card: #ffffff;           /* Clean white surface for cards and panels */
+  --pos-bg-card-subtle: #f8fafc;    /* Very soft slate for secondary areas */
+  --pos-bg-card-hover: #eef2f6;     /* Subtle interactive hover */
+  --pos-bg-input: #ffffff;          /* White input field */
+  --pos-bg-modal: #ffffff;          /* Clean white modal body */
+  
+  --pos-border-main: #e2e8f0;       /* Crisp, gentle 1px borders */
+  --pos-border-subtle: #cbd5e1;     /* Dividers */
+  
+  --pos-text-primary: #0f172a;      /* Deep high-legibility slate-900 */
+  --pos-text-secondary: #334155;    /* Clear readable slate-700 */
+  --pos-text-muted: #64748b;        /* Calibrated slate-500 for barcodes/SKUs */
+  --pos-text-subtle: #94a3b8;       /* Placeholders and captions */
+  
+  /* Calibrated Soft Accents (No Piercing Neon) */
+  --pos-retail-green: #059669;      /* Forest retail emerald */
+  --pos-retail-green-hover: #047857;
+  --pos-retail-green-bg: #ecfdf5;   /* Pastel green tint for badges */
+  --pos-retail-green-border: #a7f3d0;
+  
+  --pos-retail-amber: #d97706;      /* Warm ochre amber */
+  --pos-retail-amber-bg: #fef3c7;
+  --pos-retail-amber-border: #fde68a;
+  
+  --pos-retail-blue: #2563eb;       /* Royal cobalt blue */
+  --pos-retail-blue-bg: #eff6ff;
+  --pos-retail-blue-border: #bfdbfe;
+  
+  --pos-retail-rose: #dc2626;       /* Clean warning red */
+  --pos-retail-rose-bg: #fef2f2;
+  --pos-retail-rose-border: #fecaca;
+  
+  --pos-retail-purple: #7c3aed;     /* Soft retail violet */
+  --pos-retail-purple-bg: #f5f3ff;
+  --pos-retail-purple-border: #ddd6fe;
+
+  --pos-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --pos-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+.dark {
+  /* Comfort Slate Dim Mode (Calibrated Anti-Glare Night Mode) */
+  --pos-bg-app: #0f172a;            /* Slate 900 - much softer than pitch black #020617 */
+  --pos-bg-card: #1e293b;           /* Slate 800 cards */
+  --pos-bg-card-subtle: #172235;    /* Deep slate surface */
+  --pos-bg-card-hover: #26354d;
+  --pos-bg-input: #131c2e;
+  --pos-bg-modal: #1e293b;
+  
+  --pos-border-main: #334155;       /* Slate 700 */
+  --pos-border-subtle: #293548;
+  
+  --pos-text-primary: #f8fafc;      /* Soft off-white */
+  --pos-text-secondary: #cbd5e1;    /* Slate 300 */
+  --pos-text-muted: #94a3b8;        /* Slate 400 */
+  --pos-text-subtle: #64748b;       /* Slate 500 */
+  
+  --pos-retail-green: #10b981;      /* Calming emerald */
+  --pos-retail-green-hover: #059669;
+  --pos-retail-green-bg: rgba(16, 185, 129, 0.16);
+  --pos-retail-green-border: rgba(16, 185, 129, 0.32);
+  
+  --pos-retail-amber: #f59e0b;
+  --pos-retail-amber-bg: rgba(245, 158, 11, 0.16);
+  --pos-retail-amber-border: rgba(245, 158, 11, 0.32);
+  
+  --pos-retail-blue: #3b82f6;
+  --pos-retail-blue-bg: rgba(59, 130, 246, 0.16);
+  --pos-retail-blue-border: rgba(59, 130, 246, 0.32);
+  
+  --pos-retail-rose: #f43f5e;
+  --pos-retail-rose-bg: rgba(244, 63, 94, 0.16);
+  --pos-retail-rose-border: rgba(244, 63, 94, 0.32);
+  
+  --pos-retail-purple: #a855f7;
+  --pos-retail-purple-bg: rgba(168, 85, 247, 0.16);
+  --pos-retail-purple-border: rgba(168, 85, 247, 0.32);
+
+  --pos-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  --pos-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
 }
 
 body {
-  background: #020617;
-  color: #f8fafc;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ========================================================================= */
+/* 1. RETAIL CLEAN LIGHT THEME (ANTI-FATIGUE DAYLIGHT STANDARD)              */
+/* ========================================================================= */
+html:not(.dark) body,
+html:not(.dark) .bg-slate-950,
+html:not(.dark) .bg-slate-950\/90,
+html:not(.dark) .bg-slate-950\/80,
+html:not(.dark) .bg-slate-950\/70,
+html:not(.dark) .bg-slate-950\/60,
+html:not(.dark) .bg-slate-950\/50 {
+  background-color: var(--pos-bg-app) !important;
+  color: var(--pos-text-primary);
 }
-::-webkit-scrollbar-track {
-  background: #090d16;
+
+html:not(.dark) .bg-slate-950\/40,
+html:not(.dark) .bg-slate-950\/30,
+html:not(.dark) .bg-slate-950\/20 {
+  background-color: rgba(226, 232, 240, 0.7) !important;
+  color: var(--pos-text-primary);
 }
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
+
+/* Surfaces and Cards */
+html:not(.dark) .bg-slate-900,
+html:not(.dark) .bg-slate-900\/90,
+html:not(.dark) .bg-slate-900\/80,
+html:not(.dark) .bg-slate-900\/60,
+html:not(.dark) .bg-slate-900\/50,
+html:not(.dark) .bg-slate-900\/40 {
+  background-color: var(--pos-bg-card) !important;
+  box-shadow: var(--pos-shadow);
+}
+
+html:not(.dark) .bg-slate-850,
+html:not(.dark) .bg-slate-850\/60,
+html:not(.dark) .bg-slate-800\/60,
+html:not(.dark) .bg-slate-800\/50,
+html:not(.dark) .bg-slate-800\/40 {
+  background-color: var(--pos-bg-card-subtle) !important;
+}
+
+html:not(.dark) .hover\:bg-slate-850:hover,
+html:not(.dark) .hover\:bg-slate-800:hover,
+html:not(.dark) .hover\:bg-slate-750:hover {
+  background-color: var(--pos-bg-card-hover) !important;
+}
+
+/* Borders */
+html:not(.dark) .border-slate-800,
+html:not(.dark) .border-slate-800\/90,
+html:not(.dark) .border-slate-800\/80,
+html:not(.dark) .border-slate-800\/60,
+html:not(.dark) .border-slate-800\/50 {
+  border-color: var(--pos-border-main) !important;
+}
+
+html:not(.dark) .border-slate-700,
+html:not(.dark) .border-slate-700\/80,
+html:not(.dark) .border-slate-700\/50 {
+  border-color: var(--pos-border-subtle) !important;
+}
+
+/* Typography on Light Surfaces */
+html:not(.dark) .text-white {
+  color: var(--pos-text-primary) !important;
+}
+html:not(.dark) .text-slate-100 {
+  color: var(--pos-text-primary) !important;
+}
+html:not(.dark) .text-slate-200 {
+  color: var(--pos-text-primary) !important;
+}
+html:not(.dark) .text-slate-300 {
+  color: var(--pos-text-secondary) !important;
+}
+html:not(.dark) .text-slate-400 {
+  color: var(--pos-text-muted) !important;
+}
+html:not(.dark) .text-slate-500 {
+  color: var(--pos-text-subtle) !important;
+}
+html:not(.dark) .text-slate-600 {
+  color: #475569 !important;
+}
+html.dark .text-slate-600 {
+  color: #64748b !important;
+}
+
+/* Inputs, Selects, and Textareas */
+html:not(.dark) input,
+html:not(.dark) select,
+html:not(.dark) textarea {
+  background-color: var(--pos-bg-input) !important;
+  color: var(--pos-text-primary) !important;
+  border-color: var(--pos-border-main) !important;
+}
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: var(--pos-text-subtle) !important;
+}
+
+/* Secondary Button styling & card surfaces */
+html:not(.dark) .bg-slate-800,
+html:not(.dark) .bg-slate-800\/90,
+html:not(.dark) .bg-slate-800\/80,
+html:not(.dark) .bg-slate-800\/70 {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #e2e8f0 !important;
+}
+html:not(.dark) .bg-slate-800:hover,
+html:not(.dark) .bg-slate-800\/90:hover,
+html:not(.dark) .bg-slate-800\/80:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Daylight mode calibration for .bg-slate-700 pills, badges & buttons */
+html:not(.dark) .bg-slate-700,
+html:not(.dark) .bg-slate-700\/80,
+html:not(.dark) .bg-slate-700\/60,
+html:not(.dark) .bg-slate-700\/50 {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+html:not(.dark) .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+html:not(.dark) .active\:bg-slate-700:active {
+  background-color: #cbd5e1 !important;
+}
+
+/* Keep Crisp White Text on Solid Color Buttons & Badges */
+html:not(.dark) button[class*="bg-emerald-"],
+html:not(.dark) button[class*="bg-blue-"],
+html:not(.dark) button[class*="bg-indigo-"],
+html:not(.dark) button[class*="bg-rose-"],
+html:not(.dark) button[class*="bg-amber-500"],
+html:not(.dark) [class*="bg-blue-600"],
+html:not(.dark) [class*="bg-rose-600"] {
+  color: #ffffff !important;
+}
+
+html:not(.dark) [class*="bg-blue-600"] *,
+html:not(.dark) [class*="bg-rose-600"] * {
+  color: #ffffff !important;
+}
+
+/* Calibrated Soft Functional Badges */
+html:not(.dark) .text-emerald-400 {
+  color: var(--pos-retail-green) !important;
+}
+html:not(.dark) .bg-emerald-500\/10,
+html:not(.dark) .bg-emerald-500\/15,
+html:not(.dark) .bg-emerald-500\/20 {
+  background-color: var(--pos-retail-green-bg) !important;
+}
+html:not(.dark) .border-emerald-500\/20,
+html:not(.dark) .border-emerald-500\/30,
+html:not(.dark) .border-emerald-500\/40 {
+  border-color: var(--pos-retail-green-border) !important;
+}
+
+html:not(.dark) .text-amber-400 {
+  color: var(--pos-retail-amber) !important;
+}
+html:not(.dark) .bg-amber-500\/10,
+html:not(.dark) .bg-amber-500\/15,
+html:not(.dark) .bg-amber-500\/20 {
+  background-color: var(--pos-retail-amber-bg) !important;
+}
+html:not(.dark) .border-amber-500\/20,
+html:not(.dark) .border-amber-500\/30,
+html:not(.dark) .border-amber-500\/40 {
+  border-color: var(--pos-retail-amber-border) !important;
+}
+
+html:not(.dark) .text-blue-400,
+html:not(.dark) .text-cyan-400 {
+  color: var(--pos-retail-blue) !important;
+}
+html:not(.dark) .bg-blue-500\/10,
+html:not(.dark) .bg-blue-500\/15,
+html:not(.dark) .bg-blue-500\/20,
+html:not(.dark) .bg-cyan-500\/10,
+html:not(.dark) .bg-cyan-500\/15,
+html:not(.dark) .bg-cyan-500\/20 {
+  background-color: var(--pos-retail-blue-bg) !important;
+}
+html:not(.dark) .border-blue-500\/20,
+html:not(.dark) .border-blue-500\/30,
+html:not(.dark) .border-cyan-500\/20,
+html:not(.dark) .border-cyan-500\/30 {
+  border-color: var(--pos-retail-blue-border) !important;
+}
+
+html:not(.dark) .text-rose-400 {
+  color: var(--pos-retail-rose) !important;
+}
+html:not(.dark) .bg-rose-500\/10,
+html:not(.dark) .bg-rose-500\/15,
+html:not(.dark) .bg-rose-500\/20 {
+  background-color: var(--pos-retail-rose-bg) !important;
+}
+html:not(.dark) .border-rose-500\/20,
+html:not(.dark) .border-rose-500\/30 {
+  border-color: var(--pos-retail-rose-border) !important;
+}
+
+html:not(.dark) .text-purple-400 {
+  color: var(--pos-retail-purple) !important;
+}
+html:not(.dark) .bg-purple-500\/10,
+html:not(.dark) .bg-purple-500\/15,
+html:not(.dark) .bg-purple-500\/20 {
+  background-color: var(--pos-retail-purple-bg) !important;
+}
+html:not(.dark) .border-purple-500\/20,
+html:not(.dark) .border-purple-500\/30 {
+  border-color: var(--pos-retail-purple-border) !important;
+}
+
+/* Light Mode Custom Scrollbars */
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ========================================================================= */
+/* 2. COMFORT SLATE DARK THEME (CALIBRATED ANTI-GLARE NIGHT SHIFT)           */
+/* ========================================================================= */
+html.dark body,
+html.dark .bg-slate-950 {
+  background-color: var(--pos-bg-app) !important;
+}
+
+html.dark .bg-slate-900,
+html.dark .bg-slate-900\/90,
+html.dark .bg-slate-900\/80 {
+  background-color: var(--pos-bg-card) !important;
+}
+
+html.dark .bg-slate-850,
+html.dark .bg-slate-800\/60 {
+  background-color: var(--pos-bg-card-hover) !important;
+}
+
+html.dark .border-slate-800,
+html.dark .border-slate-800\/90,
+html.dark .border-slate-800\/80 {
+  border-color: var(--pos-border-main) !important;
+}
+
+html.dark .border-slate-700 {
+  border-color: var(--pos-border-subtle) !important;
+}
+
+/* Soften stark whites to prevent halation eye glare */
+html.dark .text-white {
+  color: var(--pos-text-primary) !important;
+}
+
+html.dark .text-emerald-400 {
+  color: var(--pos-retail-green) !important;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
   border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
-/* Dedicated Print Styles for Thermal POS Paper */
+/* ========================================================================= */
+/* 3. THERMAL RECEIPT PRINT STYLES                                           */
+/* ========================================================================= */
 @media print {
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt * {
+  #printable-receipt, #printable-receipt *,
+  #printable-packing-slip, #printable-packing-slip * {
     visibility: visible;
   }
-  #printable-receipt {
+  #printable-receipt,
+  #printable-packing-slip {
     position: absolute;
     left: 0;
     top: 0;
@@ -56,16 +406,5 @@ body {
   }
   .no-print {
     display: none !important;
-  }
-}
-
-@keyframes slideInRight {
-  0% {
-    transform: translateX(110%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(0);
-    opacity: 1;
   }
 }

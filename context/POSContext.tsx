@@ -41,6 +41,9 @@ interface POSContextType {
   setActiveTab: (tab: 'pos' | 'inventory' | 'catalog' | 'discounts' | 'orders' | 'customers' | 'history' | 'shift' | 'settings') => void;
   selectedCustomerIdForView: string | null;
   setSelectedCustomerIdForView: (id: string | null) => void;
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
+  toggleTheme: () => void;
   isPaymentModalOpen: boolean;
   setIsPaymentModalOpen: (open: boolean) => void;
   lastCompletedOrder: Order | null;
@@ -172,6 +175,54 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
 
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'catalog' | 'discounts' | 'orders' | 'customers' | 'history' | 'shift' | 'settings'>('pos');
   const [selectedCustomerIdForView, setSelectedCustomerIdForView] = useState<string | null>(null);
+  const [theme, setThemeState] = useState<'light' | 'dark'>('light');
+
+  // Initialize theme from localStorage or default to retail-clean light
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('minimart_pos_theme');
+      if (saved === 'dark' || saved === 'light') {
+        setThemeState(saved);
+        if (saved === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else {
+          document.documentElement.classList.add('light');
+          document.documentElement.classList.remove('dark');
+        }
+      } else {
+        setThemeState('light');
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {}
+  }, []);
+
+  const setTheme = useCallback((newTheme: 'light' | 'dark') => {
+    setThemeState(newTheme);
+    try {
+      localStorage.setItem('minimart_pos_theme', newTheme);
+      if (newTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {}
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    soundManager.playClick();
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    toast.info(
+      next === 'light'
+        ? '☀️ Retail Daylight Mode (Eye-Friendly Anti-Fatigue)'
+        : '🌙 Comfort Slate Mode (Anti-Glare Night Shift)',
+      'Display Theme'
+    );
+  }, [theme, setTheme]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1266,6 +1317,9 @@ export function POSProvider({ children }: { children: React.ReactNode }) {
         setActiveTab,
         selectedCustomerIdForView,
         setSelectedCustomerIdForView,
+        theme,
+        setTheme,
+        toggleTheme,
         isPaymentModalOpen,
         setIsPaymentModalOpen,
         lastCompletedOrder,

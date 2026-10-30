@@ -19,6 +19,8 @@ import {
   Clock,
   User,
   Users,
+  Sun,
+  Moon,
   PauseCircle,
   KeyRound,
   Database,
@@ -41,6 +43,8 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
     products,
     customers,
     pendingOnlineOrdersCount,
+    theme,
+    toggleTheme,
     isSupabaseLive,
     isSyncing,
     isLoading,
@@ -324,6 +328,33 @@ export default function Navbar({ onOpenHeldOrders }: { onOpenHeldOrders: () => v
               <Volume2 className="w-4 h-4" />
             ) : (
               <VolumeX className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Industry Ergonomic Theme Switcher (Daylight vs Night Shift) */}
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+              theme === 'light'
+                ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 border-amber-500/30'
+                : 'bg-slate-800 hover:bg-slate-700 text-sky-400 border-slate-700'
+            }`}
+            title={
+              theme === 'light'
+                ? '☀️ Daylight Mode Active (Eye-Friendly). Click to switch to Night Mode.'
+                : '🌙 Night Mode Active (Anti-Glare). Click to switch to Daylight Mode.'
+            }
+          >
+            {theme === 'light' ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span className="hidden sm:inline text-[11px] font-bold">Daylight</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-sky-400" />
+                <span className="hidden sm:inline text-[11px] font-bold">Night</span>
+              </>
             )}
           </button>
 

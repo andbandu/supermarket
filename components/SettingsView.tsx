@@ -15,10 +15,14 @@ import {
   RotateCcw,
   Save,
   CheckCircle2,
+  Sun,
+  Moon,
+  Eye,
+  Sparkles,
 } from 'lucide-react';
 
 export default function SettingsView() {
-  const { settings, updateSettings, resetToSampleData, isLoading } = usePOS();
+  const { settings, updateSettings, resetToSampleData, isLoading, theme, setTheme } = usePOS();
 
   const [formData, setFormData] = useState({
     storeName: settings.storeName,
@@ -279,6 +283,78 @@ export default function SettingsView() {
                 onChange={(e) => setFormData({ ...formData, receiptFooter: e.target.value })}
                 className="w-full bg-slate-950 border border-slate-700 text-white p-3 rounded-xl focus:border-emerald-500 resize-none"
               />
+            </div>
+          </div>
+
+          {/* Section: Display & Ergonomic Eye Comfort (Industry Standards) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <h3 className="font-bold text-sm text-slate-200 flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Eye className="w-4 h-4 text-emerald-400" />
+              <span>Display Theme & Anti-Fatigue Visual Ergonomics</span>
+            </h3>
+
+            <p className="text-xs text-slate-400">
+              Calibrated color palettes specifically engineered for retail store operators and cashiers working 8–12 hour shifts under commercial fluorescent and LED store lighting.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Daylight Mode Card */}
+              <div
+                onClick={() => {
+                  soundManager.playClick();
+                  setTheme('light');
+                  toast.success('Retail Daylight Mode activated', 'Theme Updated');
+                }}
+                className={`p-4 rounded-xl border cursor-pointer transition space-y-2 ${
+                  theme === 'light'
+                    ? 'bg-amber-500/10 border-amber-500/50 ring-2 ring-amber-500/30'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-500 font-bold text-xs">
+                    <Sun className="w-4 h-4" />
+                    <span>Retail Clean (Daylight Mode)</span>
+                  </div>
+                  {theme === 'light' && (
+                    <span className="text-[10px] font-extrabold bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">
+                      ACTIVE
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  <strong className="text-slate-200">Recommended for store checkout registers.</strong> Soft matte canvas with clean white card surfaces and deep charcoal text. Eliminates pupil dilation fatigue and glare under store lights.
+                </p>
+              </div>
+
+              {/* Night Shift Mode Card */}
+              <div
+                onClick={() => {
+                  soundManager.playClick();
+                  setTheme('dark');
+                  toast.success('Comfort Slate Night Mode activated', 'Theme Updated');
+                }}
+                className={`p-4 rounded-xl border cursor-pointer transition space-y-2 ${
+                  theme === 'dark'
+                    ? 'bg-sky-500/10 border-sky-500/50 ring-2 ring-sky-500/30'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
+                    <Moon className="w-4 h-4" />
+                    <span>Comfort Slate (Night Shift Mode)</span>
+                  </div>
+                  {theme === 'dark' && (
+                    <span className="text-[10px] font-extrabold bg-sky-500 text-slate-950 px-2 py-0.5 rounded-full">
+                      ACTIVE
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  <strong className="text-slate-200">For evening shifts or dim stores.</strong> Balanced slate charcoal surfaces (not harsh pitch black) with softened off-white text to completely prevent halation and eye strain.
+                </p>
+              </div>
             </div>
           </div>
 
